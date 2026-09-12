@@ -7,7 +7,9 @@ object WorkerLaunchContract {
     const val SOURCE = "worker_profile_v1"
     const val APP_UUID = "706f6c61-7269-4373-8000-6d756c746973"
     const val APP_ID = 1347244801
-    private val profileId = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+    // Catalog identifiers are opaque bounded tokens. Preserve their case:
+    // the host's UUID generator also emits uppercase identifiers.
+    private val profileId = Regex("[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}")
 
     data class Contract(val id: String, val width: Int, val height: Int, val fps: Int)
 

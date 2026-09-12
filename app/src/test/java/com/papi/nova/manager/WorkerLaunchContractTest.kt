@@ -46,6 +46,20 @@ class WorkerLaunchContractTest {
         assertEquals(1920, StreamSyncManager.resolveAutoSafeResolution(1280, 720, payload).width)
     }
 
+    @Test fun catalogIdentifiersPreserveCaseAndAcceptTheHostTokenFormat() {
+        for (id in listOf("02CC2BAD-C86D-0D0E-3F9F-AA51619E432E", "profile-a", "_profile", "a".repeat(128))) {
+            val payload = fixture()
+            payload.getJSONObject("worker_profile").put("id", id)
+            assertEquals(id, WorkerLaunchContract.parse(payload)?.id)
+            assertTrue(StreamSyncManager.hasTrustedResolvedProfile(payload))
+        }
+        for (id in listOf("", "-profile", "../profile", "a".repeat(129), "profile one")) {
+            val payload = fixture()
+            payload.getJSONObject("worker_profile").put("id", id)
+            assertNull(WorkerLaunchContract.parse(payload))
+        }
+    }
+
     @Test fun malformedOrUnknownWorkerAuthorityCannotEnterTheHostResolverPath() {
         val mutations: List<(JSONObject) -> Unit> = listOf(
             { it.put("source", "worker_profile_v2") },
