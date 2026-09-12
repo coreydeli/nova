@@ -1,0 +1,94 @@
+package com.papi.nova.manager
+
+import org.json.JSONObject
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@Config(sdk = [33])
+@RunWith(RobolectricTestRunner::class)
+class WorkerLaunchContractTest {
+    private fun fixture(): JSONObject {
+        val fields = JSONObject()
+        for ((name, value) in mapOf(
+            "display_mode" to "1920x1080x60", "display_width" to 1920,
+            "display_height" to 1080, "target_fps" to 60,
+            "target_bitrate_kbps" to 8000, "hdr" to false, "preferred_codec" to "h264",
+        )) fields.put(name, JSONObject().put("value", value).put("locked", true)
+            .put("normalized", false).put("source", "capability_validation")
+            .put("reason_code", "worker_media_contract"))
+        return JSONObject().put("status", true).put("source", "worker_profile_v1")
+            .put("worker_profile", JSONObject().put("version", 1)
+                .put("id", "12345678-1234-4234-8234-123456789abc")
+                .put("app_uuid", WorkerLaunchContract.APP_UUID).put("app_id", WorkerLaunchContract.APP_ID)
+                .put("codec", "h264").put("audio_channels", 2))
+            .put("resolved_profile", JSONObject().put("policy_version", 1).put("preset", "worker").put("fields", fields))
+            .put("topology_resolution", JSONObject().put("resolved", "gamescope_stream"))
+    }
+
+    private fun honors(payload: JSONObject = fixture(), app: String = WorkerLaunchContract.APP_UUID,
+                       fps: Float = 60f, maximum: Float = 60f, width: Int = 1920,
+                       bitrate: Int = 8000, mirror: Boolean = false, force: Boolean = false,
+                       encoder: String = "") = WorkerLaunchContract.honors(
+        payload, app, width, 1080, fps, maximum, true, true, bitrate, mirror, force, encoder,
+    )
+
+    @Test fun exactWorkerContractFlowsThroughResolutionWithoutHostDefaults() {
+        val payload = fixture()
+        assertNotNull(WorkerLaunchContract.parse(payload))
+        assertTrue(StreamSyncManager.hasTrustedResolvedProfile(payload))
+        assertTrue(honors(payload))
+        assertEquals(8000, StreamSyncManager.resolveAutoSafeBitrateKbps(20000, payload))
+        assertFalse(StreamSyncManager.resolveAutoSafeHdr(true, payload))
+        assertEquals(60f, StreamSyncManager.resolveAutoSafeTargetFps(120f, payload))
+        assertEquals(1920, StreamSyncManager.resolveAutoSafeResolution(1280, 720, payload).width)
+    }
+
+    @Test fun malformedOrUnknownWorkerAuthorityCannotEnterTheHostResolverPath() {
+        val mutations: List<(JSONObject) -> Unit> = listOf(
+            { it.put("source", "worker_profile_v2") },
+            { it.put("status", "true") },
+            { it.getJSONObject("worker_profile").put("version", 2) },
+            { it.getJSONObject("worker_profile").put("id", "../another-profile") },
+            { it.getJSONObject("worker_profile").put("app_uuid", "host-game") },
+            { it.getJSONObject("worker_profile").put("codec", "hevc") },
+            { it.getJSONObject("worker_profile").put("audio_channels", 6) },
+            { it.getJSONObject("topology_resolution").put("resolved", "desktop_display") },
+            { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("hdr").put("value", true) },
+            { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("target_fps").put("value", 59.94) },
+            { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("target_bitrate_kbps").put("value", 4000) },
+            { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("display_width").put("locked", false) },
+        )
+        for (mutate in mutations) {
+            val payload = fixture().also(mutate)
+            assertNull(payload.toString(), WorkerLaunchContract.parse(payload))
+            assertFalse(payload.toString(), StreamSyncManager.hasTrustedResolvedProfile(payload))
+        }
+    }
+
+    @Test fun contractCannotOverrideAnotherAppOrClientLocks() {
+        assertFalse(honors(app = "host-game"))
+        assertFalse(honors(fps = 30f))
+        assertFalse(honors(maximum = 30f))
+        assertFalse(honors(maximum = Float.NaN))
+        assertFalse(honors(width = 1280))
+        assertFalse(honors(bitrate = 4000))
+        assertFalse(honors(mirror = true))
+        assertFalse(honors(force = true))
+        assertFalse(honors(encoder = "vulkan"))
+        assertTrue(honors(encoder = "auto"))
+        assertTrue(honors(maximum = 59.94f))
+    }
+
+    @Test fun workerTopologyIsBoundToTheReservedAppAndExcludesHostDisplayActions() {
+        val payload = fixture()
+        assertTrue(LaunchTopologyEnvelope.matches(payload, WorkerLaunchContract.APP_UUID,
+            "gamescope_stream", true, false, false))
+        assertFalse(LaunchTopologyEnvelope.matches(payload, "host-game",
+            "gamescope_stream", true, false, false))
+        assertFalse(LaunchTopologyEnvelope.matches(payload, WorkerLaunchContract.APP_UUID,
+            "gamescope_stream", true, true, false))
+    }
+}

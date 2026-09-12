@@ -30,6 +30,7 @@ class StreamConfiguration private constructor() {
     private var resumeExistingOnly = false
     private var profilePreference = "auto"
     private var resolvedProfile = false
+    private var workerProfileId = ""
     private var mirrorDesktop = false
     private var streamMode = ""
     private var encoderBackend = ""
@@ -176,6 +177,11 @@ class StreamConfiguration private constructor() {
             return this
         }
 
+        fun setWorkerProfileId(profileId: String): Builder {
+            config.workerProfileId = profileId
+            return this
+        }
+
         fun setMirrorDesktop(enable: Boolean): Builder {
             config.mirrorDesktop = enable
             return this
@@ -274,6 +280,7 @@ class StreamConfiguration private constructor() {
     fun getProfilePreference(): String = profilePreference
 
     fun getResolvedProfile(): Boolean = resolvedProfile
+    fun getWorkerProfileId(): String = workerProfileId
 
     fun getMirrorDesktop(): Boolean = mirrorDesktop
 

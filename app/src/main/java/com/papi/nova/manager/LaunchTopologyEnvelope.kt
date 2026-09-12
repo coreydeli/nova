@@ -40,6 +40,11 @@ internal object LaunchTopologyEnvelope {
         mirrorDesktopRequested: Boolean,
         forcePrivateRequested: Boolean,
     ): Boolean {
+        if (optimization.opt("source") == WorkerLaunchContract.SOURCE) {
+            return WorkerLaunchContract.parse(optimization) != null &&
+                WorkerLaunchContract.isProfileApp(appIdentity) &&
+                !mirrorDesktopRequested && !forcePrivateRequested
+        }
         val topologyResolution = optimization.optJSONObject("topology_resolution") ?: return false
         val topologyRequest = topologyResolution.opt("requested") as? String ?: return false
         val resolvedTopology = topologyResolution.opt("resolved") as? String ?: return false

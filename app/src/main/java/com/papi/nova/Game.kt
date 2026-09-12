@@ -1360,6 +1360,7 @@ Toast.makeText(this, R.string.nova_launch_deterministic_host_required, Toast.LEN
 finish()
 return
 }
+val workerLaunch = com.papi.nova.manager.WorkerLaunchContract.parse(launchOptimization)
 val expectedLaunchTopology = if (launchResolvedProfileTrusted) {
 com.papi.nova.manager.LaunchTopologyEnvelope.resolvedSelection(launchOptimization).orEmpty()
 } else {
@@ -1448,6 +1449,7 @@ else
 LimeLog.info("Nova: Launch using explicit stream FPS " + watchStreamFps)
 }
 }
+if (workerLaunch != null) supportedVideoFormats = MoonBridge.VIDEO_FORMAT_H264
 var autoSafeTargetFps:Float = com.papi.nova.manager.StreamSyncManager.resolveAutoSafeTargetFps(
 launchRefreshRate,
 launchOptimization
@@ -1598,15 +1600,15 @@ displayHeight
 )
 .setLaunchRefreshRate(launchRefreshRate)
 .setRefreshRate(chosenFrameRate)
-.setVirtualDisplay(vDisplay)
-.setDisplayModeExplicit(displayModeExplicit)
-.setMirrorDesktop(mirrorDesktop)
-.setStreamMode(streamMode)
-.setEncoderBackend(encoderBackend)
-.setExpectedEncoder(if (launchResolvedProfileTrusted) encoderBackend else "")
+.setVirtualDisplay(workerLaunch == null && vDisplay)
+.setDisplayModeExplicit(workerLaunch == null && displayModeExplicit)
+.setMirrorDesktop(workerLaunch == null && mirrorDesktop)
+.setStreamMode(if (workerLaunch == null) streamMode else "")
+.setEncoderBackend(if (workerLaunch == null) encoderBackend else "")
+.setExpectedEncoder(if (launchResolvedProfileTrusted && workerLaunch == null) encoderBackend else "")
 .setExpectedTopology(expectedLaunchTopology)
-.setForcePrivateAfterSteamClose(forcePrivateAfterSteamClose)
-.setResolutionScaleFactor(prefConfig!!.resolutionScaleFactor)
+.setForcePrivateAfterSteamClose(workerLaunch == null && forcePrivateAfterSteamClose)
+.setResolutionScaleFactor(if (workerLaunch == null) prefConfig!!.resolutionScaleFactor else 100)
 .setApp(app)
 .setEnableUltraLowLatency(prefConfig!!.enableUltraLowLatency)
 .setForceFreshLaunch(forceFreshLaunch)
@@ -1615,13 +1617,14 @@ displayHeight
 .setEnableSops(prefConfig!!.enableSops)
 .setProfilePreference(launchProfilePreference)
 .setResolvedProfile(launchResolvedProfileTrusted)
+.setWorkerProfileId(workerLaunch?.id.orEmpty())
 .enableLocalAudioPlayback(prefConfig!!.playHostAudio)
 .setMaxPacketSize(1392)
 .setRemoteConfiguration(StreamConfiguration.STREAM_CFG_AUTO) // NvConnection will perform LAN and VPN detection
 .setSupportedVideoFormats(supportedVideoFormats)
 .setAttachedGamepadMask(gamepadMask)
 .setClientRefreshRateX100((displayRefreshRate * 100).toInt())
-.setAudioConfiguration(prefConfig!!.audioConfiguration)
+.setAudioConfiguration(if (workerLaunch == null) prefConfig!!.audioConfiguration else MoonBridge.AUDIO_CONFIGURATION_STEREO)
 .setColorSpace(decoderRenderer!!.getPreferredColorSpace())
 .setColorRange(decoderRenderer!!.getPreferredColorRange())
 .setPersistGamepadsAfterDisconnect(!prefConfig!!.multiController)
@@ -2614,6 +2617,14 @@ forcePrivateRequested:Boolean,
 requestedEncoderBackend:String
 ):Boolean {
 if (!com.papi.nova.manager.StreamSyncManager.hasTrustedResolvedProfile(optimization)) return false
+if (optimization.opt("source") == com.papi.nova.manager.WorkerLaunchContract.SOURCE) {
+return com.papi.nova.manager.WorkerLaunchContract.honors(
+optimization, appUUID?.takeIf { it.isNotBlank() } ?: appId.toString(),
+requestedWidth, requestedHeight, requestedFps, clientMaximumFps, displayLocked,
+bitrateLocked, bitrateCeilingKbps, mirrorDesktopRequested, forcePrivateRequested,
+requestedEncoderBackend
+)
+}
 val topologyEnvelopeHonored = com.papi.nova.manager.LaunchTopologyEnvelope.matches(
 optimization = optimization,
 appIdentity = appUUID?.takeIf { it.isNotBlank() }

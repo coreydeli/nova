@@ -313,7 +313,9 @@ class StreamSyncManager private constructor() {
         private fun resolvedProfile(optimization: JSONObject?): JSONObject? {
             val payload = optimization ?: return null
             val source = payload.opt("source") as? String
-            if (normalized(source) != "deterministic_preset_v1") {
+            if (source == WorkerLaunchContract.SOURCE) {
+                if (WorkerLaunchContract.parse(payload) == null) return null
+            } else if (normalized(source) != "deterministic_preset_v1") {
                 return null
             }
             val profile = payload.opt("resolved_profile") as? JSONObject ?: return null

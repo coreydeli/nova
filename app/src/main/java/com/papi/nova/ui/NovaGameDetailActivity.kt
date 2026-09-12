@@ -548,6 +548,7 @@ class NovaGameDetailActivity : NovaActivity() {
         }
 
         fun selectedEncoderBackend(): String {
+            if (com.papi.nova.manager.WorkerLaunchContract.isProfileApp(currentGame.id)) return ""
             val selected = chosenEncoderBackend ?: return ""
             val settings = clientSettings ?: return ""
             return selected.takeIf { candidate ->
@@ -570,6 +571,9 @@ class NovaGameDetailActivity : NovaActivity() {
             resolvedMode: String,
             requestGeneration: Long,
         ): Boolean {
+            // Assigned profiles own their display. Their authenticated resolver
+            // supplies the launch contract without writing host display settings.
+            if (com.papi.nova.manager.WorkerLaunchContract.isProfileApp(currentGame.id)) return true
             val updated = withContext(Dispatchers.IO) {
                 syncLaunchPreflightSettings(
                     this@NovaGameDetailActivity,
@@ -1243,7 +1247,7 @@ class NovaGameDetailActivity : NovaActivity() {
             val encoderCatalog = clientSettings?.capabilities?.takeIf {
                 it.sessionEncoderOverride
             }?.encoders.orEmpty().filter { it.available }.distinctBy { it.value }
-            if (encoderCatalog.isNotEmpty()) {
+            if (encoderCatalog.isNotEmpty() && !com.papi.nova.manager.WorkerLaunchContract.isProfileApp(currentGame.id)) {
                 val selectedEncoder = selectedEncoderBackend()
                 val selectedOption = encoderCatalog.firstOrNull { it.value == selectedEncoder }
                 rows += NovaPlaySetupRowState(

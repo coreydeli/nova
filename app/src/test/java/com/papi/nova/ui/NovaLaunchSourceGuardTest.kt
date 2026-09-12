@@ -94,8 +94,8 @@ class NovaLaunchSourceGuardTest {
             detail.contains("mirrorDesktop = true") &&
                 serverHelper.contains("Game.EXTRA_MIRROR_DESKTOP") &&
                 game.contains("EXTRA_MIRROR_DESKTOP") &&
-                game.contains(".setMirrorDesktop(mirrorDesktop)") &&
-                game.contains(".setForcePrivateAfterSteamClose(forcePrivateAfterSteamClose)") &&
+                game.contains(".setMirrorDesktop(workerLaunch == null && mirrorDesktop)") &&
+                game.contains(".setForcePrivateAfterSteamClose(workerLaunch == null && forcePrivateAfterSteamClose)") &&
                 streamConfiguration.contains("fun setMirrorDesktop(enable: Boolean)") &&
                 streamConfiguration.contains("fun setForcePrivateAfterSteamClose(enable: Boolean)") &&
                 nvHttp.contains("&mirrorDesktop=") &&
