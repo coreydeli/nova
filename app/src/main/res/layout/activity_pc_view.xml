@@ -110,7 +110,7 @@
                         android:nextFocusDown="@id/actionGithub"
                         android:paddingStart="@dimen/nova_dashboard_top_action_padding_horizontal"
                         android:paddingEnd="@dimen/nova_dashboard_top_action_padding_horizontal"
-                        android:text="@string/pcview_quick_profiles"
+                        android:text="@string/pcview_quick_presets_short"
                         android:textAllCaps="false"
                         app:backgroundTint="?attr/colorControlHighlight"
                         app:cornerRadius="@dimen/nova_dashboard_top_action_radius"
