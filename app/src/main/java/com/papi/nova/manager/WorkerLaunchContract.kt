@@ -11,7 +11,7 @@ object WorkerLaunchContract {
     // the host's UUID generator also emits uppercase identifiers.
     private val profileId = Regex("[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}")
 
-    data class Contract(val id: String, val width: Int, val height: Int, val fps: Int)
+    data class Contract(val id: String, val width: Int, val height: Int, val fps: Int, val bitrateKbps: Int)
 
     fun isProfileApp(identity: String?) = identity == APP_UUID || identity == APP_ID.toString()
 
@@ -35,12 +35,13 @@ object WorkerLaunchContract {
         val width = integral(field("display_width")) ?: return null
         val height = integral(field("display_height")) ?: return null
         val fps = integral(field("target_fps")) ?: return null
+        val bitrate = integral(field("target_bitrate_kbps")) ?: return null
         if (width !in 320..4096 || height !in 240..2160 || width % 2 != 0 || height % 2 != 0 ||
-            fps !in 15..240 || integral(field("target_bitrate_kbps")) != 8000 ||
+            fps !in 15..240 || bitrate !in 1..8000 ||
             field("hdr") != false || field("preferred_codec") != "h264" ||
             field("display_mode") != "${width}x${height}x${fps}" ||
             payload.optJSONObject("topology_resolution")?.opt("resolved") != "gamescope_stream") return null
-        return Contract(id, width, height, fps)
+        return Contract(id, width, height, fps, bitrate)
     }
 
     fun honors(
@@ -57,7 +58,7 @@ object WorkerLaunchContract {
             clientMaximumFps.isFinite() && clientMaximumFps > 0 &&
             contract.fps <= clientMaximumFps + .5f &&
             (!displayLocked || contract.width == requestedWidth && contract.height == requestedHeight) &&
-            (!bitrateLocked || bitrateCeilingKbps >= 8000)
+            (!bitrateLocked || bitrateCeilingKbps >= contract.bitrateKbps)
     }
 
     private fun integral(value: Any?): Int? {

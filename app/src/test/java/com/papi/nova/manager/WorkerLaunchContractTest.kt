@@ -46,6 +46,24 @@ class WorkerLaunchContractTest {
         assertEquals(1920, StreamSyncManager.resolveAutoSafeResolution(1280, 720, payload).width)
     }
 
+    @Test fun lowerBitratesFlowThroughResolutionAndRespectTheClientLimit() {
+        for (bitrate in listOf(1, 1000, 4000, 8000)) {
+            val payload = fixture()
+            payload.getJSONObject("resolved_profile").getJSONObject("fields")
+                .getJSONObject("target_bitrate_kbps").put("value", bitrate)
+            assertEquals(bitrate, WorkerLaunchContract.parse(payload)?.bitrateKbps)
+            assertTrue(honors(payload, bitrate = bitrate))
+            assertFalse(honors(payload, bitrate = bitrate - 1))
+            assertEquals(bitrate, StreamSyncManager.resolveAutoSafeBitrateKbps(20000, payload))
+        }
+        for (invalid in listOf(0, -1, 8001, 4000.5, "4000")) {
+            val payload = fixture()
+            payload.getJSONObject("resolved_profile").getJSONObject("fields")
+                .getJSONObject("target_bitrate_kbps").put("value", invalid)
+            assertNull(WorkerLaunchContract.parse(payload))
+        }
+    }
+
     @Test fun catalogIdentifiersPreserveCaseAndAcceptTheHostTokenFormat() {
         for (id in listOf("02CC2BAD-C86D-0D0E-3F9F-AA51619E432E", "profile-a", "_profile", "a".repeat(128))) {
             val payload = fixture()
@@ -72,7 +90,7 @@ class WorkerLaunchContractTest {
             { it.getJSONObject("topology_resolution").put("resolved", "desktop_display") },
             { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("hdr").put("value", true) },
             { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("target_fps").put("value", 59.94) },
-            { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("target_bitrate_kbps").put("value", 4000) },
+            { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("target_bitrate_kbps").put("value", 8001) },
             { it.getJSONObject("resolved_profile").getJSONObject("fields").getJSONObject("display_width").put("locked", false) },
         )
         for (mutate in mutations) {
