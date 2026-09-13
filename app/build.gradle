@@ -18,6 +18,12 @@ def targetAbis = (project.findProperty("novaAbis") ?: "arm64-v8a,armeabi-v7a,x86
 def fdroidBuild = project.findProperty("novaFdroid")?.toString()?.toBoolean() ?: false
 
 // Native debug checks inject synthetic FEC loss; disable only for delivery measurements.
+def audioReceiveDiagnosticsValue = providers.gradleProperty("novaAudioReceiveDiagnostics").getOrElse("false")
+if (!(audioReceiveDiagnosticsValue in ["true", "false"])) {
+    throw new GradleException("novaAudioReceiveDiagnostics must be true or false")
+}
+def audioReceiveDiagnostics = audioReceiveDiagnosticsValue.toBoolean()
+
 def nativeDebugChecksValue = providers.gradleProperty("novaNativeDebugChecks").getOrElse("true")
 if (!(nativeDebugChecksValue in ["true", "false"])) {
     throw new GradleException("novaNativeDebugChecks must be true or false")
@@ -105,6 +111,7 @@ android {
         externalNativeBuild {
             ndkBuild {
                 arguments "NOVA_NATIVE_DEBUG_CHECKS=" + (nativeDebugChecks ? "1" : "0")
+                arguments "NOVA_AUDIO_RECEIVE_DIAGNOSTICS=" + (audioReceiveDiagnostics ? "1" : "0")
             }
         }
     }

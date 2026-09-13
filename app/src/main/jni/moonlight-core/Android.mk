@@ -8,7 +8,13 @@ LOCAL_PATH := $(MY_LOCAL_PATH)
 include $(CLEAR_VARS)
 LOCAL_MODULE    := moonlight-core
 
-LOCAL_SRC_FILES := moonlight-common-c/src/AudioStream.c \
+ifeq ($(NOVA_AUDIO_RECEIVE_DIAGNOSTICS),1)
+NOVA_AUDIO_STREAM_SOURCE := nova_audio_stream.c
+else
+NOVA_AUDIO_STREAM_SOURCE := moonlight-common-c/src/AudioStream.c
+endif
+
+LOCAL_SRC_FILES := $(NOVA_AUDIO_STREAM_SOURCE) \
                    moonlight-common-c/src/ByteBuffer.c \
                    moonlight-common-c/src/Connection.c \
                    moonlight-common-c/src/ConnectionTester.c \

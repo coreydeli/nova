@@ -42,3 +42,52 @@ video and audio contract, client loss and decoder observations, and cleanup.
 Worker frame counts and host packet capture alone do not establish client
 delivery. A decoder watchdog message alone does not prove a hardware decoder
 fault.
+
+## Audio playback measurements
+
+Nova reports a bounded audio playback summary every ten seconds and at stream
+cleanup. The audio callback only updates counters; it does not allocate a
+snapshot or write a log on every packet. The summary distinguishes:
+
+- Native pending compressed audio and the existing queue skip decision.
+- AudioTrack blocking write duration, short writes, and negative error results.
+- Time outside the previous callback, including native work and scheduling.
+- Controller audio haptics work before the AudioTrack write.
+- Android's cumulative application write buffer underrun count and buffer size.
+
+The pending audio value is not AudioTrack latency. Written samples are
+interleaved PCM shorts, while buffer size is in audio frames. Unavailable
+platform counters use -1. Report windows are interval summaries; the first and
+last cumulative underrun counts inside a test are not exact test endpoints.
+An underrun counter or queue skip alone does not establish audible quality or
+identify where the upstream delay occurred.
+
+The dedicated native audio playback thread requests Android's audio priority
+on its first decoded callback. Setup runs on a different thread. The request
+preserves an already higher priority and playback continues if a device rejects
+it. The actual priority is logged once. Audio buffer size, queue threshold and
+write behavior are unchanged.
+
+For comparisons, retain the complete connection log and a separately timed
+steady gameplay interval. Account for host and device clock offsets when
+matching the interval to logcat. Keep startup stalls visible in the full
+connection evidence rather than treating a quiet gameplay interval as proof
+that every connection phase passed.
+
+For a debug receive timing comparison, also pass
+`-PnovaAudioReceiveDiagnostics=true`. This opt-in build observes only the
+audio socket call in the unchanged vendored audio implementation. Normal
+builds compile that implementation directly. The observer returns the original
+socket result and preserves its error value.
+
+The `Nova: audio receive` summary reports data and FEC packet counts, socket
+timeouts and errors, the longest receive call, time outside receive calls,
+and gaps between returned audio data packets. It logs once per ten second
+window and records no addresses, packet contents or credentials. The first
+wait for traffic is excluded. Receive time includes kernel and thread
+scheduling as well as waiting for packets; these are application receive
+observations, not radio arrival timestamps.
+
+Record a new native library hash for this build and compare its windows with
+playback and host capture timing. Disable the property again for the ordinary
+playback build after the experiment.
