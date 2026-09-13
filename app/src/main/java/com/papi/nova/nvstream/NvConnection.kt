@@ -557,6 +557,7 @@ class NvConnection(
                     context.videoCapabilities,
                     streamConfig.getColorSpace(),
                     streamConfig.getColorRange(),
+                    streamConfig.getWorkerProfileId().isNotEmpty(),
                 )
                 if (ret != 0) {
                     connectionAllowed.release()

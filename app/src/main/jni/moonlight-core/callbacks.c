@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <Limelight.h>
+#include "worker-audio.h"
 
 #include <opus_multistream.h>
 #include <android/log.h>
@@ -494,7 +495,7 @@ Java_com_papi_nova_nvstream_jni_MoonBridge_startConnection(JNIEnv *env, jclass c
                                                            jint clientRefreshRateX100,
                                                            jbyteArray riAesKey, jbyteArray riAesIv,
                                                            jint videoCapabilities,
-                                                           jint colorSpace, jint colorRange) {
+                                                           jint colorSpace, jint colorRange, jboolean workerProfile) {
     SERVER_INFORMATION serverInfo = {
             .address = (*env)->GetStringUTFChars(env, address, 0),
             .serverInfoAppVersion = (*env)->GetStringUTFChars(env, appVersion, 0),
@@ -532,11 +533,13 @@ Java_com_papi_nova_nvstream_jni_MoonBridge_startConnection(JNIEnv *env, jclass c
         streamConfig.encryptionFlags = ENCFLG_ALL;
     }
 
+    AUDIO_RENDERER_CALLBACKS audioCallbacks = workerAudioCallbacks(
+            &BridgeAudioRendererCallbacks, workerProfile == JNI_TRUE);
     int ret = LiStartConnection(&serverInfo,
                                 &streamConfig,
                                 &BridgeConnListenerCallbacks,
                                 &BridgeVideoRendererCallbacks,
-                                &BridgeAudioRendererCallbacks,
+                                &audioCallbacks,
                                 NULL, 0,
                                 NULL, 0);
 
