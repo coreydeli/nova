@@ -6538,7 +6538,7 @@ Toast.makeText(this, warning, Toast.LENGTH_LONG).show()
 }
 
 private fun reportClientPresentationIfNeeded(status:com.papi.nova.api.PolarisSessionStatus?) {
-if (status == null || !status!!.isStreaming || novaApiClient == null)
+if (status == null || !status!!.isStreaming || novaApiClient == null || !novaHasClientSettings())
 {
 return
 }
