@@ -76,7 +76,7 @@ class KotlinNvstreamRuntimeMigrationTest {
         MoonBridge::class.java.getMethod("bridgeArInit", intType, intType, intType)
         MoonBridge::class.java.getMethod("bridgeClStageFailed", intType, intType)
         MoonBridge::class.java.getMethod("bridgeClSetControllerLED", shortType, byteType, byteType, byteType)
-        MoonBridge::class.java.getMethod(
+        val startConnection = MoonBridge::class.java.getMethod(
             "startConnection",
             String::class.java,
             String::class.java,
@@ -96,8 +96,12 @@ class KotlinNvstreamRuntimeMigrationTest {
             ByteArray::class.java,
             intType,
             intType,
-            intType
+            intType,
+            Boolean::class.javaPrimitiveType!!
         )
+        assertEquals(intType, startConnection.returnType)
+        assertTrue(Modifier.isStatic(startConnection.modifiers))
+        assertTrue(Modifier.isNative(startConnection.modifiers))
         MoonBridge::class.java.getMethod("stopConnection")
         MoonBridge::class.java.getMethod("sendKeyboardInput", shortType, byteType, byteType, byteType)
     }
