@@ -17,6 +17,13 @@ def targetAbis = (project.findProperty("novaAbis") ?: "arm64-v8a,armeabi-v7a,x86
         .findAll { !it.isEmpty() }
 def fdroidBuild = project.findProperty("novaFdroid")?.toString()?.toBoolean() ?: false
 
+// Native debug checks inject synthetic FEC loss; disable only for delivery measurements.
+def nativeDebugChecksValue = providers.gradleProperty("novaNativeDebugChecks").getOrElse("true")
+if (!(nativeDebugChecksValue in ["true", "false"])) {
+    throw new GradleException("novaNativeDebugChecks must be true or false")
+}
+def nativeDebugChecks = nativeDebugChecksValue == "true"
+
 def moonlightCommonCPath = "src/main/jni/moonlight-core/moonlight-common-c"
 def moonlightCommonCDir = file(moonlightCommonCPath)
 def moonlightCommonCRequiredPaths = [
@@ -94,6 +101,12 @@ android {
         // Generate native debug symbols to allow Google Play to symbolicate our native crashes
         ndk.debugSymbolLevel = 'FULL'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            ndkBuild {
+                arguments "NOVA_NATIVE_DEBUG_CHECKS=" + (nativeDebugChecks ? "1" : "0")
+            }
+        }
     }
 
     flavorDimensions "root"

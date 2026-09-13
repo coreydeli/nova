@@ -50,7 +50,9 @@ LOCAL_CFLAGS := -DHAS_SOCKLEN_T=1 -DLC_ANDROID -DHAVE_CLOCK_GETTIME=1 \
                 -ffunction-sections -fdata-sections
 
 ifeq ($(NDK_DEBUG),1)
+ifneq ($(NOVA_NATIVE_DEBUG_CHECKS),0)
 LOCAL_CFLAGS += -DLC_DEBUG
+endif
 endif
 
 LOCAL_LDLIBS := -llog
