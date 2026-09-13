@@ -91,3 +91,16 @@ observations, not radio arrival timestamps.
 Record a new native library hash for this build and compare its windows with
 playback and host capture timing. Disable the property again for the ordinary
 playback build after the experiment.
+
+On 2026-09-13, the five playback counter tests passed and ordinary and receive
+observer APKs both built. After physical comparisons, an ordinary APK from
+`15555ac1eab3ca72edb0bc1d1d7964ab604225cc` was installed with both native
+diagnostic flags false. Its packaged native library matched the earlier
+ordinary priority build. The
+[Polaris audio timing report](https://github.com/papi-ux/polaris/blob/67b12eee/docs/research/container-multiseat-audio-timing.md)
+retains the failed 120 FPS high bitrate observation alongside quiet diagnostic
+repeats. Those repeats do not establish that the audio failure is fixed.
+
+A separate library check with Polaris `4ee1468d` showed the assigned Steam
+profile's name on the physical Android client. Nova continues to identify the
+profile launch by its stable app UUID, independently of that display name.

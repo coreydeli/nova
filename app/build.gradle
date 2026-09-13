@@ -17,13 +17,14 @@ def targetAbis = (project.findProperty("novaAbis") ?: "arm64-v8a,armeabi-v7a,x86
         .findAll { !it.isEmpty() }
 def fdroidBuild = project.findProperty("novaFdroid")?.toString()?.toBoolean() ?: false
 
-// Native debug checks inject synthetic FEC loss; disable only for delivery measurements.
+// Optional observer for audio socket timing; ordinary builds keep the original source.
 def audioReceiveDiagnosticsValue = providers.gradleProperty("novaAudioReceiveDiagnostics").getOrElse("false")
 if (!(audioReceiveDiagnosticsValue in ["true", "false"])) {
     throw new GradleException("novaAudioReceiveDiagnostics must be true or false")
 }
 def audioReceiveDiagnostics = audioReceiveDiagnosticsValue.toBoolean()
 
+// Native debug checks inject synthetic FEC loss; disable only for delivery measurements.
 def nativeDebugChecksValue = providers.gradleProperty("novaNativeDebugChecks").getOrElse("true")
 if (!(nativeDebugChecksValue in ["true", "false"])) {
     throw new GradleException("novaNativeDebugChecks must be true or false")
