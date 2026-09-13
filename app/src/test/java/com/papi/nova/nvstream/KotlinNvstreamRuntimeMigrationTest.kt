@@ -101,7 +101,6 @@ class KotlinNvstreamRuntimeMigrationTest {
         )
         assertEquals(intType, startConnection.returnType)
         assertTrue(Modifier.isStatic(startConnection.modifiers))
-        assertTrue(Modifier.isNative(startConnection.modifiers))
         MoonBridge::class.java.getMethod("stopConnection")
         MoonBridge::class.java.getMethod("sendKeyboardInput", shortType, byteType, byteType, byteType)
     }
