@@ -9,6 +9,7 @@ import android.media.AudioTrack
 import android.media.MediaRouter
 import android.media.audiofx.AudioEffect
 import android.os.Build
+import android.os.Process
 import com.papi.nova.LimeLog
 import com.papi.nova.nvstream.av.audio.AudioRenderer
 import com.papi.nova.nvstream.jni.MoonBridge
@@ -140,6 +141,9 @@ class AndroidAudioRenderer(
     override fun playDecodedAudio(audioData: ShortArray) {
         val audioTrack = track ?: return
         if (!trackStarted) {
+            // Setup runs on a different thread. Apply the audio priority here,
+            // on the dedicated native playback thread that exits with this stream.
+            configurePlaybackThread()
             audioTrack.play()
             trackStarted = true
             logRoutedAudioDevice(audioTrack)
@@ -163,6 +167,17 @@ class AndroidAudioRenderer(
             pendingMs, audioData.size, skipped, writeResult
         )
         if (playbackStats.reportDue(endNs)) reportPlaybackStats(audioTrack, endNs)
+    }
+
+    private fun configurePlaybackThread() {
+        try {
+            if (Process.getThreadPriority(Process.myTid()) > Process.THREAD_PRIORITY_AUDIO) {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+            }
+            LimeLog.info("Nova: audio playback thread priority=${Process.getThreadPriority(Process.myTid())}")
+        } catch (e: RuntimeException) {
+            LimeLog.warning("Nova: audio playback priority unavailable: ${e.javaClass.simpleName}")
+        }
     }
 
     private fun reportPlaybackStats(audioTrack: AudioTrack, nowNs: Long) {
