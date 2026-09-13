@@ -46,6 +46,24 @@ class WorkerLaunchContractTest {
         assertEquals(1920, StreamSyncManager.resolveAutoSafeResolution(1280, 720, payload).width)
     }
 
+    @Test fun highRefreshWorkerContractPreserves120FpsAndRejectsSlowerClientLimits() {
+        val payload = fixture()
+        val fields = payload.getJSONObject("resolved_profile").getJSONObject("fields")
+        fields.getJSONObject("display_mode").put("value", "1920x1080x120")
+        fields.getJSONObject("target_fps").put("value", 120)
+        assertEquals(120, WorkerLaunchContract.parse(payload)?.fps)
+        assertTrue(StreamSyncManager.hasTrustedResolvedProfile(payload))
+        assertTrue(honors(payload, fps = 120f, maximum = 120f))
+        assertTrue(honors(payload, fps = 120f, maximum = 119.88f))
+        assertEquals(120f, StreamSyncManager.resolveAutoSafeTargetFps(120f, payload))
+        assertFalse(honors(payload, fps = 60f, maximum = 120f))
+        assertFalse(honors(payload, fps = 120f, maximum = 60f))
+
+        fields.getJSONObject("display_mode").put("value", "1920x1080x60")
+        assertNull(WorkerLaunchContract.parse(payload))
+        assertFalse(StreamSyncManager.hasTrustedResolvedProfile(payload))
+    }
+
     @Test fun lowerBitratesFlowThroughResolutionAndRespectTheClientLimit() {
         for (bitrate in listOf(1, 1000, 4000, 8000)) {
             val payload = fixture()
