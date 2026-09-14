@@ -121,4 +121,37 @@ class NovaSpaceComposeTest {
         compose.onNodeWithTag("nova-space-primary").assertIsNotEnabled()
         compose.onNodeWithTag("nova-space-message").assertIsDisplayed()
     }
+
+    @Test fun chooserStartsOnCurrentSpaceAndControllerSelectsWithoutLaunching() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "a", listOf(
+            com.papi.nova.api.PolarisSpace("a", "Alex", "ready", true),
+            com.papi.nova.api.PolarisSpace("b", "Sam", "in_use", false)))
+        var choice = ""
+        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, { choice = it }, {}) } }
+        awaitFocus("nova-space-choice-a")
+        compose.onNodeWithTag("nova-space-choice-a").performKeyInput { pressKey(Key.DirectionDown) }
+        awaitFocus("nova-space-choice-b")
+        compose.onNodeWithTag("nova-space-choice-b").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals("b", choice) }
+        compose.onNodeWithText("Open Space").assertDoesNotExist()
+        compose.onNodeWithText("In Use").assertIsDisplayed()
+    }
+
+    @Test fun activeStreamLocksChoicesAndKeepsBackFocused() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, false, "a", listOf(
+            com.papi.nova.api.PolarisSpace("a", "Alex", "stopping", true),
+            com.papi.nova.api.PolarisSpace("b", "Sam", "ready", false)))
+        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, {}, {}) } }
+        awaitFocus("nova-space-chooser-back")
+        compose.onNodeWithTag("nova-space-choice-b").assertIsNotEnabled()
+        compose.onNodeWithText("End your stream before switching Spaces.").assertIsDisplayed()
+    }
+
+    @Test fun busySpaceKeepsChooserReachableAndCannotOpen() {
+        compose.setContent { NovaComposeTheme {
+            NovaSpaceContent(space, "Gaming PC", null, {}, {}, {}, spaceState = "in_use", onChoose = {})
+        } }
+        compose.onNodeWithTag("nova-space-primary").assertIsNotEnabled()
+        compose.onNodeWithTag("nova-space-choose").assertIsEnabled()
+    }
 }

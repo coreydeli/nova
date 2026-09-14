@@ -2328,6 +2328,32 @@ class PolarisApiClient @JvmOverloads constructor(
         }
     }
 
+    /** A missing endpoint is the only legacy fallback. Other failures keep actions disabled. */
+    fun getSpaces(): PolarisSpaces? {
+        val request = Request.Builder().url("$baseUrl/spaces").build()
+        executeGetWithRetry(request).use { response ->
+            if (response.code == 404) return null
+            return readSpaces(response)
+        }
+    }
+
+    fun selectSpace(id: String, previousId: String): PolarisSpaces {
+        val body = JSONObject().put("space_id", id).put("previous_space_id", previousId).toString()
+        val request = Request.Builder().url("$baseUrl/spaces/select")
+            .post(okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), body)).build()
+        // Never automatically replay a choice after an uncertain response.
+        executeNonRetryable(request).use { return readSpaces(it) }
+    }
+
+    private fun readSpaces(response: okhttp3.Response): PolarisSpaces {
+        if (response.code != 200) throw PolarisApiRejectedException(PolarisApiRejection(response.code,
+            "space_request_rejected", if (response.code == 409) "Space changed or still in use. Refresh and try again."
+                else "Could not update Spaces. Check the connection and device access in Polaris."))
+        val bytes = response.body?.let { PolarisArtworkDiskCache.readBounded(it.byteStream(), 2 * 1024 * 1024) }
+            ?: throw IOException("Could not read Space status.")
+        return PolarisSpaces.parse(bytes.toString(Charsets.UTF_8)) ?: throw IOException("Could not verify Space status.")
+    }
+
     fun getClientSettings(): PolarisClientSettings? {
         return try {
             val request = Request.Builder().url("$baseUrl/client-settings").build()

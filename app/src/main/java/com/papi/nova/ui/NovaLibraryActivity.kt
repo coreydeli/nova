@@ -1,5 +1,7 @@
 package com.papi.nova.ui
 
+import com.papi.nova.api.PolarisSpaces
+import kotlinx.coroutines.isActive
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
@@ -206,6 +208,13 @@ class NovaLibraryActivity : NovaActivity() {
     private var activeSystemMenu by mutableStateOf(false)
     private var spaceFocusEpoch by mutableStateOf(0)
     private var spaceOpenPending by mutableStateOf(false)
+    private var spacesSnapshot by mutableStateOf<PolarisSpaces?>(null)
+    private var spacesChecked by mutableStateOf(false)
+    private var spacesError by mutableStateOf<String?>(null)
+    private var chooseSpaceVisible by mutableStateOf(false)
+    private var choosingSpace by mutableStateOf(false)
+    private var spacesEpoch = 0
+    private var spacesPoll: Job? = null
     private var lastFocusedGameId by mutableStateOf<String?>(null)
     private var lastFocusedPrimaryFilter by mutableStateOf(NovaLibraryPrimaryFilter.ALL)
     private var controllerHintChromeState by mutableStateOf(NovaControllerHintChromeState())
@@ -378,6 +387,7 @@ class NovaLibraryActivity : NovaActivity() {
 
     private fun dismissActiveLibraryOverlay(): Boolean {
         return when {
+            chooseSpaceVisible -> { chooseSpaceVisible = false; spaceFocusEpoch++; true }
             activeSystemMenu -> {
                 activeSystemMenu = false
                 true
@@ -421,6 +431,7 @@ class NovaLibraryActivity : NovaActivity() {
         super.onResume()
         spaceFocusEpoch++
         spaceOpenPending = false
+        startSpacesPolling()
         if (recreateForThemeChangeIfNeeded()) return
         revealControllerHints(NovaControllerHintChromeEvent.EXPLICIT_REVEAL)
         if (
@@ -428,6 +439,58 @@ class NovaLibraryActivity : NovaActivity() {
             activeSessionRefreshGate.shouldRefreshOnResume(isInitialLoading)
         ) {
             refreshActiveSession(scheduleFollowUps = true)
+        }
+    }
+
+    override fun onPause() {
+        spacesEpoch++; spacesPoll?.cancel(); spacesPoll = null
+        super.onPause()
+    }
+
+    private fun startSpacesPolling() {
+        spacesPoll?.cancel()
+        if (choosingSpace || !::apiClient.isInitialized) return
+        val epoch = ++spacesEpoch
+        spacesPoll = lifecycleScope.launch {
+            while (isActive) {
+                if (NovaSpaceUiState.singleSpace(allGames) != null) refreshSpaces(epoch)
+                delay(5000)
+            }
+        }
+    }
+
+    private suspend fun refreshSpaces(epoch: Int): Boolean {
+        return try {
+            val next = withContext(Dispatchers.IO) { apiClient.getSpaces() }
+            if (epoch != spacesEpoch) false else {
+                spacesSnapshot = next; spacesChecked = true; spacesError = null; true
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (epoch == spacesEpoch) { spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again." }
+            false
+        }
+    }
+
+    private fun chooseSpace(id: String) {
+        val snapshot = spacesSnapshot ?: return
+        if (choosingSpace || !spacesChecked || !snapshot.canSwitch || snapshot.spaces.none { it.id == id }) return
+        if (id == snapshot.selectedId) { chooseSpaceVisible = false; spaceFocusEpoch++; return }
+        choosingSpace = true; spacesEpoch++; spacesPoll?.cancel()
+        lifecycleScope.launch {
+            try {
+                val next = withContext(Dispatchers.IO) { apiClient.selectSpace(id, snapshot.selectedId) }
+                spacesSnapshot = next; spacesChecked = true; spacesError = null
+                launchErrorMessage = null; activeSession = null; chooseSpaceVisible = false; spaceFocusEpoch++
+                refreshActiveSession(scheduleFollowUps = true)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                spacesChecked = false
+                spacesError = "The Space choice could not be confirmed. Refresh Spaces before trying again."
+            } finally {
+                choosingSpace = false
+                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startSpacesPolling()
+            }
         }
     }
 
@@ -443,6 +506,7 @@ class NovaLibraryActivity : NovaActivity() {
         if (keyCode == KeyEvent.KEYCODE_BUTTON_B && dismissActiveLibraryOverlay()) {
             return true
         }
+        if (chooseSpaceVisible) return super.onKeyDown(keyCode, event)
         return when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_PAGE_UP -> {
                 if (!activeOptionsSheet) openLibraryOptionsSheet()
@@ -796,18 +860,33 @@ class NovaLibraryActivity : NovaActivity() {
     private fun showGameDetail(game: PolarisGame) = showDetail(game)
 
     private fun openSpace(game: PolarisGame) {
-        if (!NovaSpaceUiState.isSpace(game) || spaceOpenPending) return
-        spaceOpenPending = true
-        queryActiveSessionAsync { session ->
-            spaceOpenPending = false
-            if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@queryActiveSessionAsync
-            when (NovaSpaceUiState.availability(game, session)) {
-                NovaSpaceUiState.Availability.RESUMABLE -> resumeActiveSession(requireNotNull(session))
-                NovaSpaceUiState.Availability.IN_USE -> {
-                    activeSession = session
-                    launchErrorMessage = getString(R.string.nova_space_in_use)
+        if (!NovaSpaceUiState.isSpace(game) || spaceOpenPending || choosingSpace || !spacesChecked ||
+            (spacesSnapshot != null && (!spacesSnapshot!!.available || spacesSnapshot!!.selected?.state !in setOf("ready", "running")))) return
+        val expected = spacesSnapshot?.selectedId
+        spaceOpenPending = true; spacesEpoch++; spacesPoll?.cancel()
+        lifecycleScope.launch {
+            try {
+                val fresh = withContext(Dispatchers.IO) { apiClient.getSpaces() }
+                spacesSnapshot = fresh; spacesChecked = true; spacesError = null
+                if (fresh?.selectedId != expected || (fresh != null && (!fresh.available || fresh.selected?.state !in setOf("ready", "running")))) {
+                    launchErrorMessage = "Space status changed. Review it before opening."
+                    return@launch
                 }
-                NovaSpaceUiState.Availability.AVAILABLE -> showDetail(game, openSpace = true)
+                val session = withContext(Dispatchers.IO) { queryActiveSession() }
+                if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@launch
+                when (NovaSpaceUiState.availability(game, session)) {
+                    NovaSpaceUiState.Availability.RESUMABLE -> resumeActiveSession(requireNotNull(session))
+                    NovaSpaceUiState.Availability.IN_USE -> {
+                        activeSession = session; launchErrorMessage = getString(R.string.nova_space_in_use)
+                    }
+                    NovaSpaceUiState.Availability.AVAILABLE -> showDetail(game, openSpace = true)
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again."
+            } finally {
+                spaceOpenPending = false
+                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startSpacesPolling()
             }
         }
     }
@@ -818,7 +897,7 @@ class NovaLibraryActivity : NovaActivity() {
         gameDetailLauncher.launch(
             NovaGameDetailActivity.newIntent(
                 context = this,
-                game = game,
+                game = if (NovaSpaceUiState.isSpace(game)) spacesSnapshot?.selected?.let { game.copy(name = it.name) } ?: game else game,
                 host = streamHost,
                 httpsPort = streamHttpsPort,
                 serverCert = streamServerCert,
@@ -1287,6 +1366,7 @@ class NovaLibraryActivity : NovaActivity() {
         val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
         val largeText = LocalDensity.current.fontScale >= 1.5f
         val space = NovaSpaceUiState.singleSpace(model.allGames).takeUnless { isInitialLoading || loadErrorMessage != null }
+            ?.let { game -> spacesSnapshot?.selected?.let { game.copy(name = it.name) } ?: game }
         val stageMode = model.optionsState.layoutMode == NovaLibraryLayoutMode.STAGE
         val showLandscapeControlRail = NovaLibraryUiStateMapper.showLandscapeControlRail()
         val layoutSpec = NovaLibraryUiStateMapper.layoutSpec(
@@ -1372,19 +1452,26 @@ class NovaLibraryActivity : NovaActivity() {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     if (space != null) {
-                        NovaSpaceContent(
+                        if (chooseSpaceVisible && spacesSnapshot != null) {
+                            NovaSpaceChooser(spacesSnapshot!!, choosingSpace || !spacesChecked, spacesError,
+                                onChoose = ::chooseSpace, onBack = { chooseSpaceVisible = false; spaceFocusEpoch++ })
+                        } else NovaSpaceContent(
                             game = space,
+                            displayName = spacesSnapshot?.selected?.name,
+                            spaceState = spacesSnapshot?.selected?.state,
+                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1) ({ chooseSpaceVisible = true }) else null,
                             hostName = serverName.orEmpty().ifBlank { serverHost },
                             activeSession = activeSession,
                             onOpen = { openSpace(space) },
                             onSettings = { showDetail(space, spaceSettings = true) },
                             onBack = onBack,
                             onSystem = onOpenSystemMenu,
-                            primaryEnabled = !spaceOpenPending,
+                            primaryEnabled = !spaceOpenPending && !choosingSpace && spacesChecked &&
+                                (spacesSnapshot == null || spacesSnapshot!!.available && spacesSnapshot!!.selected?.state in setOf("ready", "running")),
                             primaryLabel = if (spaceOpenPending) getString(R.string.nova_space_checking) else null,
-                            message = launchErrorMessage,
+                            message = spacesError ?: launchErrorMessage ?: if (!spacesChecked) "Checking Space Status…" else null,
                             focusEpoch = spaceFocusEpoch,
-                            focusEnabled = !activeSystemMenu && !activeOptionsSheet && activeFilterSheet == null,
+                            focusEnabled = !chooseSpaceVisible && !activeSystemMenu && !activeOptionsSheet && activeFilterSheet == null,
                         )
                     } else if (isLandscape) {
                         NovaLibraryLandscapeStageShell(

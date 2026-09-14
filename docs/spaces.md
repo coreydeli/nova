@@ -1,8 +1,7 @@
 # Spaces In Nova
 
 Spaces are optional gaming environments hosted by Polaris. Each Space keeps its
-own sign-ins, installed games, and saves. Nova connects you to the Space assigned
-to your paired device. Streaming Presets control picture and performance settings.
+own sign-ins, installed games, and saves. Nova connects you to a Space allowed for your paired device. Streaming Presets control picture and performance settings.
 
 This flow is part of the Spaces preview. Creating, assigning, renaming, removing,
 and restoring Spaces happens in the Polaris web interface under **Spaces**.
@@ -12,7 +11,7 @@ Docker on your Android device.
 ## Open Your Space
 
 1. Pair Nova with your Polaris host if it is not already paired.
-2. In Polaris, assign a Space to that device under **Spaces**, then **Device Access**.
+2. In Polaris, assign a Space to that device under **Spaces**, then **Default Space**.
 3. Open the host in Nova. When it exposes one assigned Space, Library shows
    **Your Space**, its name, and the host name.
 4. Select **Open Space**. Nova checks the host and uses your saved stream settings.
@@ -27,6 +26,24 @@ Nova offers **Resume Space** only when the host reports a matching session owned
 by this device. A matching session owned by another device is **In Use**. An
 unrelated game on the host does not become this Space's Resume action. Opening
 an available Space is still subject to the host's current capacity and access.
+
+## Choose Another Space
+
+1. In Polaris, choose a device's **Default Space**.
+2. On any additional Space card, expand **Device Access** and allow that device.
+   Wait for confirmation. Changing access requires all Space streams to be stopped.
+3. Open the host in Nova and select **Choose Space**. Only your permitted Spaces appear.
+4. Pick a Space, then select **Open Space** when it is **Ready To Play**.
+
+Choosing a Space does not launch it. Polaris remembers your choice for this device
+across app and host restarts. Your device must finish its current stream and cleanup
+before switching. Other devices can keep playing while you choose.
+
+**In Use** means another device is using that Space. Choose another or wait for it
+to become ready. Nova checks status while this screen is open and checks again
+before opening. **Starting** and **Stopping** keep Open Space unavailable until the
+host finishes. If status cannot be verified, check the connection and try again.
+Older hosts without the chooser API retain their existing single-Space flow.
 
 ## Change Stream Settings
 
@@ -61,9 +78,8 @@ perform the same actions.
 ## Ordinary Streaming And Shared Hosts
 
 Hosts serving ordinary games retain the existing Library. Nova does not add a
-required Spaces tab or a setup step for ordinary streaming. Current device
-assignment exposes one Space; selecting from several permitted Spaces awaits a
-host contract that provides those choices and their individual status.
+required Spaces tab or a setup step for ordinary streaming. With one allowed Space, Open Space stays a direct action. With several, Nova adds
+**Choose Space** beside it. No extra Spaces tab is required.
 
 Removing a Space in Polaris retains its Steam data and installed games. It removes
 device access and does not reclaim disk space. Restore it and assign the device

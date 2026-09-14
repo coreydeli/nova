@@ -50,13 +50,17 @@ internal fun NovaSpaceContent(
     focusEpoch: Int = 0,
     focusEnabled: Boolean = true,
     onSystem: (() -> Unit)? = null,
+    onChoose: (() -> Unit)? = null,
+    displayName: String? = null,
+    spaceState: String? = null,
 ) {
     val colors = LocalNovaComposeColors.current
     val inputModeManager = LocalInputModeManager.current
     val availability = NovaSpaceUiState.availability(game, activeSession)
-    val inUse = availability == NovaSpaceUiState.Availability.IN_USE
+    val inUse = spaceState == "in_use" || availability == NovaSpaceUiState.Availability.IN_USE
     val primaryFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
+    val chooseFocus = remember { FocusRequester() }
     val backFocus = remember { FocusRequester() }
     val systemFocus = remember { FocusRequester() }
     var lastAction by rememberSaveable(game.id) { mutableStateOf("open") }
@@ -65,6 +69,7 @@ internal fun NovaSpaceContent(
             delay(NOVA_FIRST_FOCUS_SETTLE_MS)
             val target = when {
                 showSettings -> backFocus
+                lastAction == "choose" && onChoose != null -> chooseFocus
                 lastAction == "system" && onSystem != null -> systemFocus
                 lastAction == "back" -> backFocus
                 lastAction == "settings" || inUse || !primaryEnabled -> settingsFocus
@@ -96,7 +101,7 @@ internal fun NovaSpaceContent(
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.nova_space_your_space), color = colors.accent, fontSize = 14.sp)
-                    Text(game.name, color = colors.textPrimary, fontSize = if (showSettings) 22.sp else 28.sp, fontWeight = FontWeight.SemiBold)
+                    Text(displayName ?: game.name, color = colors.textPrimary, fontSize = if (showSettings) 22.sp else 28.sp, fontWeight = FontWeight.SemiBold)
                     Text(stringResource(R.string.nova_space_on_host, hostName), color = colors.textSecondary, fontSize = 14.sp)
                 }
                 if (showSettings) {
@@ -110,6 +115,8 @@ internal fun NovaSpaceContent(
                 stringResource(if (showSettings) R.string.nova_space_settings_description else R.string.nova_space_description),
                 color = colors.textSecondary, fontSize = 16.sp,
             )
+            if (!showSettings && spaceState != null) Text(spaceStateLabel(spaceState), color = colors.accent,
+                fontSize = 16.sp, modifier = Modifier.testTag("nova-space-status"))
             if (inUse) {
                 Text(stringResource(R.string.nova_space_in_use), color = colors.textPrimary, fontSize = 16.sp)
             }
@@ -168,6 +175,11 @@ internal fun NovaSpaceContent(
                         modifier = Modifier.focusRequester(settingsFocus)
                             .onFocusChanged { if (it.isFocused) lastAction = "settings" }.testTag("nova-space-settings"),
                     )
+                    onChoose?.let { action ->
+                        NovaActionButton(text = "Choose Space", onClick = action, minHeight = 52.dp,
+                            modifier = Modifier.focusRequester(chooseFocus).onFocusChanged { if (it.isFocused) lastAction = "choose" }
+                                .testTag("nova-space-choose"))
+                    }
                     onSystem?.let { action ->
                         NovaActionButton(text = stringResource(R.string.nova_space_system), onClick = action, minHeight = 52.dp,
                             modifier = Modifier.focusRequester(systemFocus).onFocusChanged { if (it.isFocused) lastAction = "system" })
