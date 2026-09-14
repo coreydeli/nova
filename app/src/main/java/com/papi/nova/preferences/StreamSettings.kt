@@ -910,12 +910,19 @@ class StreamSettings : NovaActivity() {
             }
 
             val allowedFpsValues = NovaDisplayFpsCapability.allowedFpsValues(maxSupportedFps)
-            if (120 !in allowedFpsValues) {
-                removeEntryFromListAndSetValue(PreferenceConfiguration.FPS_PREF_STRING, "120", "90")
-            }
-            if (90 !in allowedFpsValues) {
-                removeEntryFromListAndSetValue(PreferenceConfiguration.FPS_PREF_STRING, "90", "60")
-            }
+            // Cull every standard option this panel cannot present, fastest first, and
+            // move a stored value straight to the fastest option that survives: the
+            // same answer NovaDisplayFpsCapability.coerce() gives Play Setup.
+            NovaDisplayFpsCapability.STANDARD_FPS_VALUES
+                .filter { it > 60 && it !in allowedFpsValues }
+                .sortedDescending()
+                .forEach { fps ->
+                    removeEntryFromListAndSetValue(
+                        PreferenceConfiguration.FPS_PREF_STRING,
+                        fps.toString(),
+                        NovaDisplayFpsCapability.coerce(fps, maxSupportedFps).toString(),
+                    )
+                }
             addNativeFrameRateEntry(maxSupportedFps, false)
 
             findPreference<CheckBoxPreference>(PreferenceConfiguration.UNLOCK_FPS_STRING)?.let { unlockFpsPref ->

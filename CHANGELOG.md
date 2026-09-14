@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The frame rate ladder goes past 120. Polaris now advertises up to 240 FPS for launches where it creates the display itself, and Nova's standard options stopped at 120 in three places, so a 144 or 165 Hz panel could only ask for its own rate through the Native entry. 144, 165 and 240 are standard options now, offered only where the panel can present them, in Play Setup's Frame Rate row and the settings list alike, and a saved choice from a faster panel lands on the fastest rate a slower one has. (papi-ux/polaris#686)
+
 ## 1.4.7 - 2026-09-12
 
 Matched client for Polaris 1.4.7: the landscape library gives its screen back to the games.
