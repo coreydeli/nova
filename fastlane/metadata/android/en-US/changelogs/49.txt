@@ -1,0 +1,3 @@
+Nova 1.4.8
+
+The frame rate list now offers 144, 165 and 240 where the panel can present them, matching a host that advertises up to 240 for the displays it creates. Play Setup says which kind of SDR you are getting: not requested, turned off on the host, or the host encoder. When it is your own Request HDR toggle, it names the setting.
