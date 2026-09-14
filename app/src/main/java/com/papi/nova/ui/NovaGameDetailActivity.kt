@@ -1444,6 +1444,7 @@ class NovaGameDetailActivity : NovaActivity() {
                     launchOptimization(),
                     clientAskedFps = (effectiveFpsPin(chosenFps, profilePreference, launchPreferences.fps)
                         ?: launchPreferences.fps.toInt()).toDouble(),
+                    clientAskedHdr = launchPreferences.enableHdr,
                 )
                 NovaGameDetailContent(
                     uiState = uiState,
@@ -2327,6 +2328,7 @@ class NovaGameDetailActivity : NovaActivity() {
                 opt,
                 clientAskedFps = clientPreferences.fps.toDouble(),
                 clientFpsPinned = NovaLaunchStreamOverride.highFpsPin(profilePreference, clientPreferences.fps) != null,
+                clientAskedHdr = clientPreferences.enableHdr,
             ),
             rawOptimization = opt,
             reviewRequired = StreamSyncManager.requiresLaunchPreflightReview(opt),

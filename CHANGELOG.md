@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Play Setup's resolved line now says which kind of SDR you are getting. "SDR" alone hid the difference between a host that refused HDR and a client that never asked for it, and the second is where you end up after fixing everything on the host: Nova's own Request HDR toggle is off by default. The line now reads "SDR (HDR not requested)", "SDR (host turned HDR off)" or "SDR (host encoder)", and the first names the setting to turn on. (papi-ux/polaris#686 follow-up)
 - The frame rate ladder goes past 120. Polaris now advertises up to 240 FPS for launches where it creates the display itself, and Nova's standard options stopped at 120 in three places, so a 144 or 165 Hz panel could only ask for its own rate through the Native entry. 144, 165 and 240 are standard options now, offered only where the panel can present them, in Play Setup's Frame Rate row and the settings list alike, and a saved choice from a faster panel lands on the fastest rate a slower one has. (papi-ux/polaris#686)
 
 ## 1.4.7 - 2026-09-12
