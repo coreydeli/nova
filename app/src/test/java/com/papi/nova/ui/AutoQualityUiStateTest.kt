@@ -39,6 +39,32 @@ class AutoQualityUiStateTest {
         assertEquals("Tuning: Unknown", AutoQualityUiState.from(null).compactLabel)
         assertEquals("Tuning: Unknown", AutoQualityUiState.from(status().copy(liveTuningPresent = true)).compactLabel)
     }
+    @Test fun spacesExplicitNullDescribesFixedBitrateWithoutEnablingTuning() {
+        val wire = org.json.JSONObject().put("source", "worker_profile_v1")
+            .put("live_tuning", org.json.JSONObject.NULL)
+        val status = com.papi.nova.api.PolarisApiClient.parseSessionStatusResponse(wire)
+        val ui = AutoQualityUiState.from(status)
+        assertEquals("Fixed bitrate", ui.compactLabel)
+        assertFalse(ui.enabled)
+        assertFalse(ui.recovering)
+        assertEquals(0, status.encoder.bitrateKbps)
+    }
+    @Test fun missingMalformedOrUnrecognizedTuningDoesNotBecomeFixedBitrate() {
+        val unknown = listOf(
+            org.json.JSONObject().put("live_tuning", org.json.JSONObject.NULL),
+            org.json.JSONObject().put("source", "worker_profile_v2").put("live_tuning", org.json.JSONObject.NULL),
+            org.json.JSONObject().put("source", "worker_profile_v1").put("live_tuning", org.json.JSONObject()),
+            org.json.JSONObject().put("source", "worker_profile_v1").put("live_tuning", false)
+        )
+        for (wire in unknown) {
+            val status = com.papi.nova.api.PolarisApiClient.parseSessionStatusResponse(wire)
+            assertFalse(status.liveTuningUnavailable)
+            assertEquals("Tuning: Unknown", AutoQualityUiState.from(status).compactLabel)
+        }
+        val absent = com.papi.nova.api.PolarisApiClient.parseSessionStatusResponse(
+            org.json.JSONObject().put("source", "worker_profile_v1"))
+        assertFalse(absent.liveTuningUnavailable)
+    }
     @Test fun legacyTargetDoesNotClaimEncoderAcknowledgement() {
         val ui = AutoQualityUiState.from(status())
         assertTrue(ui.detail.contains("acknowledgement is unavailable"))

@@ -161,13 +161,13 @@ class PolarisApiClient @JvmOverloads constructor(
     fun <T> withCurrentSessionStatus(consumer: (PolarisSessionStatus?) -> T): T = consumer(mutableSessionStatus.value)
     @Synchronized fun invalidateLiveTuningEvent() {
         val current = mutableSessionStatus.value ?: return
-        if (current.liveTuningPresent) publishStatus(current.copy(liveTuning = null, liveTuningPresent = true))
+        if (current.liveTuningPresent) publishStatus(current.copy(liveTuning = null, liveTuningPresent = true, liveTuningUnavailable = false))
     }
     @Synchronized fun acceptLiveTuningEvent(live: LiveTuningStatus) {
         val current = mutableSessionStatus.value ?: return
         if (current.liveTuning?.hostInstance == live.hostInstance &&
             current.sessionGeneration == live.sessionGeneration && current.appSessionId == live.appSessionId) {
-            publishStatus(current.copy(liveTuning = live, liveTuningPresent = true))
+            publishStatus(current.copy(liveTuning = live, liveTuningPresent = true, liveTuningUnavailable = false))
         }
     }
     // Status reads are authoritative resync boundaries. Serializing their I/O
@@ -1756,6 +1756,8 @@ class PolarisApiClient @JvmOverloads constructor(
                 dynamicRange = json.optInt("dynamic_range", 0),
                 liveTuning = LiveTuningStatus.parse(json.optJSONObject("live_tuning")),
                 liveTuningPresent = json.has("live_tuning"),
+                liveTuningUnavailable = json.opt("source") == com.papi.nova.manager.WorkerLaunchContract.SOURCE &&
+                    json.has("live_tuning") && json.isNull("live_tuning"),
                 adaptiveBitrateEnabled = json.optBoolean("adaptive_bitrate_enabled", false),
                 adaptiveTargetBitrateKbps = json.optInt("adaptive_target_bitrate_kbps", 0),
                 aiAutoQualityEnabled = json.optBoolean(
