@@ -920,4 +920,62 @@ class NovaLaunchProfileSummaryTest {
         assertFalse("${profileFact.value} ${profileFact.detail}".contains("paired_client"))
     }
 
+    private fun deterministicPreset(hdr: Boolean, source: String, reason: String): JSONObject = JSONObject(
+        "{" +
+            "\"source\":\"deterministic_preset_v1\"," +
+            "\"resolved_profile\":{" +
+            "\"policy_version\":1,\"preset\":\"auto\",\"preset_label\":\"Auto\"," +
+            "\"fields\":{" +
+            "\"display_width\":{\"value\":1920}," +
+            "\"display_height\":{\"value\":1080}," +
+            "\"target_fps\":{\"value\":60}," +
+            "\"target_bitrate_kbps\":{\"value\":20000}," +
+            "\"hdr\":{\"value\":$hdr,\"source\":\"$source\",\"reason_code\":\"$reason\"}" +
+            "}}}"
+    )
+
+    // Every HDR gate on the host was open and the line still said "SDR", because this
+    // client's own Request HDR toggle was off. That was the last gate nobody could see.
+    @Test
+    fun resolvedLineSaysWhenThisClientNeverAskedForHdr() {
+        val summary = buildNovaLaunchProfileSummary(
+            deterministicPreset(hdr = false, source = "client_launch_request", reason = "requested_hdr_setting"),
+            clientAskedHdr = false,
+        )
+        requireNotNull(summary)
+        assertTrue(summary.selectedLine, summary.selectedLine.startsWith("Resolved: 1920×1080 @ 60 FPS"))
+        assertTrue(summary.selectedLine, summary.selectedLine.endsWith("SDR (HDR not requested)"))
+        assertTrue(summary.noticeRecommendation, summary.noticeRecommendation.contains("Request HDR when host supports it"))
+    }
+
+    @Test
+    fun hostReasonAloneIsEnoughWhenTheClientDoesNotKnowItsOwnToggle() {
+        val summary = buildNovaLaunchProfileSummary(
+            deterministicPreset(hdr = false, source = "client_launch_request", reason = "requested_hdr_setting"),
+        )
+        requireNotNull(summary)
+        assertTrue(summary.selectedLine, summary.selectedLine.endsWith("SDR (HDR not requested)"))
+    }
+
+    @Test
+    fun resolvedLineBlamesTheHostWhenTheHostTurnedHdrOff() {
+        val summary = buildNovaLaunchProfileSummary(
+            deterministicPreset(hdr = false, source = "capability_validation", reason = "paired_device_hdr_unsupported"),
+            clientAskedHdr = true,
+        )
+        requireNotNull(summary)
+        assertTrue(summary.selectedLine, summary.selectedLine.endsWith("SDR (host turned HDR off)"))
+        assertEquals("Doctor observations do not change launch settings.", summary.noticeRecommendation)
+    }
+
+    @Test
+    fun resolvedLineSaysHdrPlainlyWhenItIsOn() {
+        val summary = buildNovaLaunchProfileSummary(
+            deterministicPreset(hdr = true, source = "client_launch_request", reason = "requested_hdr_setting"),
+            clientAskedHdr = true,
+        )
+        requireNotNull(summary)
+        assertTrue(summary.selectedLine, summary.selectedLine.endsWith(" · HDR"))
+        assertFalse(summary.selectedLine.contains("not requested"))
+    }
 }

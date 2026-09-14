@@ -16,8 +16,13 @@ private const val HEALTHY_PROFILE_TARGET_TOLERANCE_FPS = 0.5
 internal fun NovaGameDetailOptimizationState.withLaunchProfileSummary(
     launchOptimization: JSONObject?,
     clientAskedFps: Double,
+    clientAskedHdr: Boolean? = null,
 ): NovaGameDetailOptimizationState = copy(
-    profileSummary = buildNovaLaunchProfileSummary(launchOptimization, clientAskedFps = clientAskedFps),
+    profileSummary = buildNovaLaunchProfileSummary(
+        launchOptimization,
+        clientAskedFps = clientAskedFps,
+        clientAskedHdr = clientAskedHdr,
+    ),
 )
 
 data class NovaLaunchProfileSummary(
@@ -51,12 +56,18 @@ internal fun buildNovaLaunchProfileSummary(
     /** The fps this client actually asked for (its Settings frame rate); 0 = unknown. */
     clientAskedFps: Double = 0.0,
     /** True when Tuning = High FPS is pinning [clientAskedFps] over the host's plan. */
-    clientFpsPinned: Boolean = false
+    clientFpsPinned: Boolean = false,
+    /**
+     * Whether this client's own Settings toggle asks for HDR; null when the caller does not
+     * know. "SDR" alone hid the difference between a host that refused HDR and a client that
+     * never asked, which is where someone who has fixed everything on the host ends up.
+     */
+    clientAskedHdr: Boolean? = null
 ): NovaLaunchProfileSummary? {
     if (optimization == null) return null
     val pinnedFps = if (clientFpsPinned && clientAskedFps > 0.0) clientAskedFps else 0.0
     if (optimization.optString("source", "").equals("deterministic_preset_v1", ignoreCase = true)) {
-        return buildDeterministicLaunchPresetSummary(optimization, pinnedFps, clientAskedFps)
+        return buildDeterministicLaunchPresetSummary(optimization, pinnedFps, clientAskedFps, clientAskedHdr)
     }
 
     val profileState = optimization.optJSONObject("profile_state")
@@ -256,7 +267,8 @@ internal fun buildNovaLaunchProfileSummary(
 private fun buildDeterministicLaunchPresetSummary(
     optimization: JSONObject,
     pinnedFps: Double,
-    clientAskedFps: Double
+    clientAskedFps: Double,
+    clientAskedHdr: Boolean? = null
 ): NovaLaunchProfileSummary? {
     val resolved = optimization.optJSONObject("resolved_profile") ?: return null
     if (resolved.optInt("policy_version", 0) != 1) return null
@@ -286,7 +298,24 @@ private fun buildDeterministicLaunchPresetSummary(
     (value("preferred_codec") as? String)?.takeIf { it.isNotBlank() }?.let {
         selectedParts += it.uppercase(Locale.US)
     }
-    (value("hdr") as? Boolean)?.let { selectedParts += if (it) "HDR" else "SDR" }
+    // The host resolves hdr and stamps why (reason_code). Say which kind of SDR this is:
+    // the client never asked, the host turned it off, or the host encoder cannot. The
+    // client's own toggle is the surest signal for the first case; the host's reason
+    // covers a client that does not know its own setting.
+    val hdrValue = value("hdr") as? Boolean
+    val hdrReason = detail("hdr")?.optString("reason_code", "").orEmpty()
+    val hdrNotRequested = hdrValue == false &&
+        (clientAskedHdr == false || hdrReason == "requested_hdr_setting")
+    hdrValue?.let { hdr ->
+        selectedParts += when {
+            hdr -> "HDR"
+            hdrNotRequested -> "SDR (HDR not requested)"
+            hdrReason == "paired_device_hdr_unsupported" || hdrReason == "client_profile_hdr_lock" ->
+                "SDR (host turned HDR off)"
+            hdrReason == "host_encoder_hdr_unsupported" -> "SDR (host encoder)"
+            else -> "SDR"
+        }
+    }
 
     val asked = if (clientAskedFps > 0.0) " · ${formatFps(clientAskedFps)} FPS" else ""
     val profileDescription =
@@ -302,7 +331,11 @@ private fun buildDeterministicLaunchPresetSummary(
         reasonLine = "Deterministic preset v1; Doctor history and AI output cannot change these fields.",
         limitingLine = "",
         noticeDetail = profileDescription,
-        noticeRecommendation = "Doctor observations do not change launch settings.",
+        noticeRecommendation = if (hdrNotRequested) {
+            "HDR is off in this client's Settings (Request HDR when host supports it). Turn it on to ask; Polaris decides from there."
+        } else {
+            "Doctor observations do not change launch settings."
+        },
         noticeTone = NovaLaunchProfileNoticeTone.HEALTHY,
         noticeLabel = "Launch preset",
         freshnessLine = "Resolved for this launch",
