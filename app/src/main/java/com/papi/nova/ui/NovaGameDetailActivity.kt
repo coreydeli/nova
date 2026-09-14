@@ -379,6 +379,13 @@ class NovaGameDetailActivity : NovaActivity() {
             modePickerOpen = false
             true
         }
+        spaceGame != null && destination == NovaGameDetailDestination.PLAY_SETUP &&
+            intent.getBooleanExtra(EXTRA_SPACE_SETTINGS, false) -> {
+            // Settings opened from Library return to its selected Space and live status.
+            publishGameUpdate()
+            finish()
+            true
+        }
         destination != NovaGameDetailDestination.OVERVIEW -> {
             destination = NovaGameDetailDestination.OVERVIEW
             steamDecision = null
