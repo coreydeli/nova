@@ -633,14 +633,16 @@ object NovaLibraryUiStateMapper {
         eyebrow: String,
         caption: String
     ): NovaLibraryHeroState {
+        val isSpace = com.papi.nova.manager.WorkerLaunchContract.isProfileApp(game.id)
         val badges = buildList {
+            if (isSpace) add("Space")
             if (game.lastLaunched > 0) add("Recent")
             if (game.hdrSupported) add("HDR")
             if (game.categoryLabel.isNotBlank()) add(game.categoryLabel)
             if (game.sourceLabel.isNotBlank()) add(game.sourceLabel)
             if (game.runtimeLabel.isNotBlank()) add(game.runtimeLabel)
         }.distinct()
-        val subtitle = game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
+        val subtitle = if (isSpace) "Gaming space" else game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
         val actionContext = when (reason) {
             NovaLibraryHeroReason.LAST_PLAYED -> "Continue"
             NovaLibraryHeroReason.FIRST_FILTERED -> if (eyebrow == "Filtered library") "Filtered" else "Ready"
@@ -659,13 +661,13 @@ object NovaLibraryUiStateMapper {
             game = game,
             title = game.name,
             subtitle = subtitle,
-            caption = caption,
-            eyebrow = eyebrow,
+            caption = if (isSpace) "Your own sign-ins, games, and saves. Manage device access in Spaces in Polaris." else caption,
+            eyebrow = if (isSpace) "Your space" else eyebrow,
             // This opens the game's window; it does not start a stream. It said
             // "Launch" while its action was OPEN_DETAIL -- the one hero whose label
             // disagreed with what it does. The action is the deliberate half: the
             // detail window is where you decide how to play, so the hero gets you there.
-            actionLabel = "Open",
+            actionLabel = if (isSpace) "Open space" else "Open",
             badges = badges,
             reason = reason,
             primaryAction = NovaLibraryHeroPrimaryAction.OPEN_DETAIL,
@@ -673,7 +675,7 @@ object NovaLibraryUiStateMapper {
                 .filter { it.isNotBlank() }
                 .joinToString(" • "),
             artworkFallbackTitle = game.name,
-            artworkFallbackSubtitle = fallbackSubtitle
+            artworkFallbackSubtitle = if (isSpace) "Gaming space" else fallbackSubtitle
         )
     }
 

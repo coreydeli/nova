@@ -1515,7 +1515,8 @@
     <string name="profile_manager_edit_profile_with">Edit Preset: %s</string>
     <string name="profile_manager_new_profile_with">New Preset: %s</string>
     <string name="profile_manager_no_profiles_yet">No presets yet</string>
-    <string name="profile_manager_profiles_description">Streaming presets save settings such as resolution, frame rate, and bitrate. Switching a preset changes stream settings. To switch Steam sign-ins or saves, use a gaming space configured in Polaris.</string>
+    <string name="profile_manager_profiles_description">Presets change picture quality and performance, such as resolution, frame rate, and bitrate. Spaces in Polaris keep separate Steam sign-ins, games, and saves.</string>
+    <string name="profile_manager_preset_name">Preset: %s</string>
     <string name="profile_manager_tap_create_profile">Tap + to create your first preset</string>
     <string name="profile_manager_choose_profile">Choose Preset</string>
     <string name="profile_manager_deactivated_profile">Deactivated preset</string>

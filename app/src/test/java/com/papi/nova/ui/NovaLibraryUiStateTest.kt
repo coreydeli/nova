@@ -10,6 +10,25 @@ import org.junit.Test
 
 class NovaLibraryUiStateTest {
     @Test
+    fun assignedSpaceIsClearlyNamedAndStillOpensDetailsBeforeLaunching() {
+        for (id in listOf(com.papi.nova.manager.WorkerLaunchContract.APP_UUID,
+            com.papi.nova.manager.WorkerLaunchContract.APP_ID.toString())) {
+            val space = game(id, "Living room", source = "polaris")
+            val hero = NovaLibraryUiStateMapper.heroState(listOf(space), listOf(space), null)
+            assertEquals("Living room", hero.title)
+            assertEquals("Your space", hero.eyebrow)
+            assertEquals("Gaming space", hero.subtitle)
+            assertEquals("Open space", hero.actionLabel)
+            assertTrue(hero.caption.contains("sign-ins, games, and saves"))
+            assertEquals(NovaLibraryHeroPrimaryAction.OPEN_DETAIL, hero.primaryAction)
+        }
+        val ordinary = game("ordinary-game", "Living room", source = "steam")
+        val hero = NovaLibraryUiStateMapper.heroState(listOf(ordinary), listOf(ordinary), null)
+        assertEquals("Open", hero.actionLabel)
+        assertEquals("Steam", hero.subtitle)
+    }
+
+    @Test
     fun searchAndSourceFilterNarrowsGames() {
         val games = listOf(
             game("portal", "Portal 2", source = "steam"),
