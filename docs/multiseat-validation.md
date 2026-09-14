@@ -88,6 +88,36 @@ wait for traffic is excluded. Receive time includes kernel and thread
 scheduling as well as waiting for packets; these are application receive
 observations, not radio arrival timestamps.
 
+The opt-in observer also queries Linux `SIOCGSTAMPNS` after each returned audio
+data packet. It primes the ioctl before receiving traffic and discards that
+initial result. This leaves the upstream receive call, its result and error,
+and the packet contents intact. It does enable kernel socket timestamping and
+adds diagnostic syscalls. It is excluded from ordinary builds.
+
+`kernel_gap_max_us` measures gaps between the kernel timestamps of consecutive
+returned data packets. `kernel_age_max_us` measures time from that timestamp
+until the observer reads the realtime clock, including the observer itself.
+Counts of gaps and ages over 20 ms, missing timestamps, and reversed timestamp
+order accompany these maxima. A missing timestamp is not a zero delay.
+`observer_max_us` measures counter and timestamp work after the receive call,
+excluding the summary log. It is not a complete observer overhead measurement.
+
+The largest application data gap in each window also records its current and preceding RTP sequences,
+receive time, corresponding kernel gap, and kernel age. Missing associated
+kernel values are -1. This permits matching that event to a private host capture
+without logging audio contents, network addresses, or credentials. Sequence
+numbers wrap; correlate using time as well as sequence. A ten second maximum
+does not preserve every individual stall.
+
+These are kernel software timestamps, not Wi-Fi radio arrival times. Kernel
+values use the realtime clock and can be distorted by clock adjustments;
+application receive gaps use the monotonic clock. Inspect both, check clock
+stability, and retain packet order before attributing a delay to networking or
+scheduling. The socket must have one reader and must not have `SO_TIMESTAMP`
+or `SO_TIMESTAMPNS` enabled for this ioctl to describe the last returned packet.
+See the [Linux socket documentation](https://man7.org/linux/man-pages/man7/socket.7.html)
+and [kernel timestamp implementation](https://github.com/torvalds/linux/blob/v6.6/net/core/sock.c#L3362).
+
 Record a new native library hash for this build and compare its windows with
 playback and host capture timing. Disable the property again for the ordinary
 playback build after the experiment.
