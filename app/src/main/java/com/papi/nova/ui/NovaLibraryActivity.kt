@@ -204,6 +204,8 @@ class NovaLibraryActivity : NovaActivity() {
     private var optionsState by mutableStateOf(NovaLibraryOptionsState())
     private var activeOptionsSheet by mutableStateOf(false)
     private var activeSystemMenu by mutableStateOf(false)
+    private var spaceFocusEpoch by mutableStateOf(0)
+    private var spaceOpenPending by mutableStateOf(false)
     private var lastFocusedGameId by mutableStateOf<String?>(null)
     private var lastFocusedPrimaryFilter by mutableStateOf(NovaLibraryPrimaryFilter.ALL)
     private var controllerHintChromeState by mutableStateOf(NovaControllerHintChromeState())
@@ -417,6 +419,8 @@ class NovaLibraryActivity : NovaActivity() {
 
     override fun onResume() {
         super.onResume()
+        spaceFocusEpoch++
+        spaceOpenPending = false
         if (recreateForThemeChangeIfNeeded()) return
         revealControllerHints(NovaControllerHintChromeEvent.EXPLICIT_REVEAL)
         if (
@@ -449,10 +453,12 @@ class NovaLibraryActivity : NovaActivity() {
                 true
             }
             KeyEvent.KEYCODE_BUTTON_X -> {
-                if (!activeOptionsSheet) openLibraryOptionsSheet()
+                val space = NovaSpaceUiState.singleSpace(allGames)
+                if (space != null && !hasActiveLibraryOverlay) showDetail(space, spaceSettings = true)
+                else if (!activeOptionsSheet) openLibraryOptionsSheet()
                 true
             }
-            KeyEvent.KEYCODE_BUTTON_Y -> cycleLibraryLayoutMode()
+            KeyEvent.KEYCODE_BUTTON_Y -> if (NovaSpaceUiState.singleSpace(allGames) != null) true else cycleLibraryLayoutMode()
             KeyEvent.KEYCODE_HELP,
             KeyEvent.KEYCODE_INFO,
             KeyEvent.KEYCODE_F1 -> {
@@ -787,7 +793,26 @@ class NovaLibraryActivity : NovaActivity() {
         filterState: NovaLibraryFilterState
     ): Boolean = searchQuery.isNotBlank() || filterState.hasActiveConstraint
 
-    private fun showGameDetail(game: PolarisGame) {
+    private fun showGameDetail(game: PolarisGame) = showDetail(game)
+
+    private fun openSpace(game: PolarisGame) {
+        if (!NovaSpaceUiState.isSpace(game) || spaceOpenPending) return
+        spaceOpenPending = true
+        queryActiveSessionAsync { session ->
+            spaceOpenPending = false
+            if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@queryActiveSessionAsync
+            when (NovaSpaceUiState.availability(game, session)) {
+                NovaSpaceUiState.Availability.RESUMABLE -> resumeActiveSession(requireNotNull(session))
+                NovaSpaceUiState.Availability.IN_USE -> {
+                    activeSession = session
+                    launchErrorMessage = getString(R.string.nova_space_in_use)
+                }
+                NovaSpaceUiState.Availability.AVAILABLE -> showDetail(game, openSpace = true)
+            }
+        }
+    }
+
+    private fun showDetail(game: PolarisGame, openSpace: Boolean = false, spaceSettings: Boolean = false) {
         launchErrorMessage = null
         val preferences = PreferenceConfiguration.readPreferences(this)
         gameDetailLauncher.launch(
@@ -802,7 +827,8 @@ class NovaLibraryActivity : NovaActivity() {
                 // surface, with the same auto-match state, as the one in the System drawer.
                 serverName = streamPcName.ifBlank { streamHost },
                 serverUuid = streamPcUuid,
-            ),
+            ).putExtra(NovaGameDetailActivity.EXTRA_OPEN_SPACE, openSpace)
+                .putExtra(NovaGameDetailActivity.EXTRA_SPACE_SETTINGS, spaceSettings),
         )
         NovaThemeManager.applyForwardTransition(this)
     }
@@ -819,13 +845,18 @@ class NovaLibraryActivity : NovaActivity() {
         if (data.getBooleanExtra(NovaGameDetailActivity.EXTRA_RESULT_MANAGE_SERVER, false)) {
             openServerDisplaySettings()
         }
+        val requestedSpaceJson = data.getStringExtra(NovaGameDetailActivity.EXTRA_RESULT_SPACE)
+        val requestedSpace = requestedSpaceJson?.let(PolarisGameJson::decode)
+        fun sessionMatchesRequest(session: NovaLibraryActiveSessionUiState): Boolean =
+            requestedSpaceJson == null || (requestedSpace != null &&
+                NovaSpaceUiState.matchingSession(requestedSpace, session)?.ownedByClient == true)
         when (data.getStringExtra(NovaGameDetailActivity.EXTRA_RESULT_SESSION)) {
             // The window saw the session but cannot act on it: resuming and ending both
             // need stream credentials that live here.
             NovaGameDetailActivity.RESULT_SESSION_RESUME ->
-                queryActiveSessionAsync { session -> session?.let { resumeActiveSession(it) } }
+                queryActiveSessionAsync { session -> session?.takeIf(::sessionMatchesRequest)?.let { resumeActiveSession(it) } }
             NovaGameDetailActivity.RESULT_SESSION_END ->
-                queryActiveSessionAsync { session -> session?.let { endActiveSession(it) } }
+                queryActiveSessionAsync { session -> session?.takeIf(::sessionMatchesRequest)?.let { endActiveSession(it) } }
         }
 
         val launch = data.getStringExtra(NovaGameDetailActivity.EXTRA_RESULT_LAUNCH) ?: return
@@ -897,7 +928,7 @@ class NovaLibraryActivity : NovaActivity() {
 
         NovaSnackbar.show(
             this,
-            getString(
+            if (NovaSpaceUiState.isSpace(game)) getString(R.string.nova_space_opening) else getString(
                 R.string.nova_library_launching_mode,
                 game.name,
                 when {
@@ -1251,6 +1282,7 @@ class NovaLibraryActivity : NovaActivity() {
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
         val largeText = LocalDensity.current.fontScale >= 1.5f
+        val space = NovaSpaceUiState.singleSpace(model.allGames).takeUnless { isInitialLoading || loadErrorMessage != null }
         val stageMode = model.optionsState.layoutMode == NovaLibraryLayoutMode.STAGE
         val showLandscapeControlRail = NovaLibraryUiStateMapper.showLandscapeControlRail()
         val layoutSpec = NovaLibraryUiStateMapper.layoutSpec(
@@ -1335,7 +1367,22 @@ class NovaLibraryActivity : NovaActivity() {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (isLandscape) {
+                    if (space != null) {
+                        NovaSpaceContent(
+                            game = space,
+                            hostName = serverName.orEmpty().ifBlank { serverHost },
+                            activeSession = activeSession,
+                            onOpen = { openSpace(space) },
+                            onSettings = { showDetail(space, spaceSettings = true) },
+                            onBack = onBack,
+                            onSystem = onOpenSystemMenu,
+                            primaryEnabled = !spaceOpenPending,
+                            primaryLabel = if (spaceOpenPending) getString(R.string.nova_space_checking) else null,
+                            message = launchErrorMessage,
+                            focusEpoch = spaceFocusEpoch,
+                            focusEnabled = !activeSystemMenu && !activeOptionsSheet && activeFilterSheet == null,
+                        )
+                    } else if (isLandscape) {
                         NovaLibraryLandscapeStageShell(
                             modifier = Modifier.fillMaxSize(),
                             reserveControllerHintSpace = true,
@@ -1361,6 +1408,7 @@ class NovaLibraryActivity : NovaActivity() {
                                                     NovaLibraryHeroPrimaryAction.RESUME,
                                                     NovaLibraryHeroPrimaryAction.WATCH ->
                                                         activeSession?.let(onResumeSession)
+                                                    NovaLibraryHeroPrimaryAction.OPEN_SPACE -> model.hero.game?.let { openSpace(it) }
                                                     NovaLibraryHeroPrimaryAction.OPEN_DETAIL ->
                                                         model.hero.game?.let(onOpenDetail)
                                                     NovaLibraryHeroPrimaryAction.MANAGE_LIBRARY -> onManageServer()
@@ -1443,6 +1491,7 @@ class NovaLibraryActivity : NovaActivity() {
                                         when (model.hero.primaryAction) {
                                             NovaLibraryHeroPrimaryAction.RESUME,
                                             NovaLibraryHeroPrimaryAction.WATCH -> activeSession?.let(onResumeSession)
+                                            NovaLibraryHeroPrimaryAction.OPEN_SPACE -> model.hero.game?.let { openSpace(it) }
                                             NovaLibraryHeroPrimaryAction.OPEN_DETAIL -> model.hero.game?.let(onOpenDetail)
                                             NovaLibraryHeroPrimaryAction.MANAGE_LIBRARY -> onManageServer()
                                             NovaLibraryHeroPrimaryAction.CLEAR_FILTERS -> onClearFilters()
@@ -1494,7 +1543,7 @@ class NovaLibraryActivity : NovaActivity() {
                     }
                 }
                 AnimatedVisibility(
-                    visible = stageMode || controllerHintsVisible,
+                    visible = space == null && (stageMode || controllerHintsVisible),
                     modifier = Modifier.align(Alignment.BottomCenter),
                     enter = fadeIn(tween(durationMillis = CONTROLLER_HINT_ANIMATION_MS)) +
                         slideInVertically(

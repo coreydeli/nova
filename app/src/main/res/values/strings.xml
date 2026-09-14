@@ -80,7 +80,7 @@
     <string name="pcview_quick_scan_pair">Scan Pair</string>
     <string name="pcview_quick_polaris_sync">Wake Host</string>
     <string name="pcview_quick_start_polaris">Wake Host</string>
-    <string name="pcview_quick_profiles">Streaming presets</string>
+    <string name="pcview_quick_profiles">Streaming Presets</string>
     <string name="pcview_quick_presets_short">Presets</string>
     <string name="pcview_quick_theme">Theme</string>
     <string name="pcview_quick_github">GitHub</string>
@@ -1527,7 +1527,7 @@
     <string name="profile_manager_profile_deleted">Deleted preset \'%s\'</string>
     <string name="profile_manager_failed_to_save">Could not save this preset. Try again.</string>
     <string name="profile_manager_failed_to_load">Could not load streaming presets. Reopen this screen to try again.</string>
-    <string name="profile_manager_active_profile">Active preset: %s</string>
+    <string name="profile_manager_active_profile">Active Preset: %s</string>
     <string name="rename">Rename</string>
     <string name="save">Save</string>
     <string name="title_low_latency_frame_balance">LFR (Experimental)</string>
@@ -1683,4 +1683,23 @@
     <string name="nova_hdr_decoder_unsupported">Decoder does not support HDR10 profile</string>
     <string name="nova_decoder_no_hevc">No HEVC decoder found</string>
     <string name="nova_decoder_no_av1">No AV1 decoder found</string>
+    <string name="nova_space_your_space">Your Space</string>
+    <string name="nova_space_open">Open Space</string>
+    <string name="nova_space_resume">Resume Space</string>
+    <string name="nova_space_stream_settings">Stream Settings</string>
+    <string name="nova_space_streaming_preset">Streaming Preset</string>
+    <string name="nova_space_opening">Opening Space</string>
+    <string name="nova_space_checking">Checking Space</string>
+    <string name="nova_space_retry">Retry Connection</string>
+    <string name="nova_space_review">Review Settings</string>
+    <string name="nova_space_in_use_short">In Use</string>
+    <string name="nova_space_in_use">This Space is in use on another device. Try again when that player has finished.</string>
+    <string name="nova_space_on_host">On %s</string>
+    <string name="nova_space_description">Open your gaming environment with its own sign-ins, games, and saves.</string>
+    <string name="nova_space_settings_description">These choices are saved on this device and used the next time you open a Space.</string>
+    <string name="nova_space_settings_loading">Checking which stream settings this host supports.</string>
+    <string name="nova_space_done">Done</string>
+    <string name="nova_space_back">Back</string>
+    <string name="nova_space_system">System</string>
+    <string name="nova_space_controller_hint">A Select · B Back</string>
 </resources>

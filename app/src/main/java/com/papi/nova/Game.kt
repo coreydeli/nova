@@ -1361,6 +1361,7 @@ finish()
 return
 }
 val workerLaunch = com.papi.nova.manager.WorkerLaunchContract.parse(launchOptimization)
+val exactMediaCadence = launchResolvedProfileTrusted || workerLaunch != null
 val expectedLaunchTopology = if (launchResolvedProfileTrusted) {
 com.papi.nova.manager.LaunchTopologyEnvelope.resolvedSelection(launchOptimization).orEmpty()
 } else {
@@ -1454,7 +1455,7 @@ var autoSafeTargetFps:Float = com.papi.nova.manager.StreamSyncManager.resolveAut
 launchRefreshRate,
 launchOptimization
 )
-if (!launchResolvedProfileTrusted &&
+if (!exactMediaCadence &&
 autoSafeTargetFps > 0f && autoSafeTargetFps + 0.5f < launchRefreshRate)
 {
 var displayCompatibleTargetFps:Float = com.papi.nova.manager.StreamSyncManager.resolveDisplayCompatibleAutoSafeTargetFps(
@@ -1469,7 +1470,7 @@ autoSafeTargetFps + " -> " + displayCompatibleTargetFps))
 autoSafeTargetFps = displayCompatibleTargetFps
 }
 }
-if (launchResolvedProfileTrusted && autoSafeTargetFps > 0f)
+if (exactMediaCadence && autoSafeTargetFps > 0f)
 {
 configuredStreamFrameRateFps = autoSafeTargetFps
 }
@@ -1495,7 +1496,7 @@ LimeLog.info("Display refresh rate: " + displayRefreshRate)
         // desired FPS setting here in accordance with the active display refresh rate.
         var roundedRefreshRate:Int = Math.round(displayRefreshRate)
 var chosenFrameRate:Float = if (configuredStreamFrameRateFps > 0f) configuredStreamFrameRateFps else prefConfig!!.fps
-if (!launchResolvedProfileTrusted &&
+if (!exactMediaCadence &&
 prefConfig!!.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS)
 {
 if (chosenFrameRate >= roundedRefreshRate)
@@ -1520,7 +1521,7 @@ LimeLog.info("Adjusting FPS target for screen to " + chosenFrameRate)
 }
 }
 
-if (!launchResolvedProfileTrusted && prefConfig!!.framePacingWarpFactor > 0)
+if (!exactMediaCadence && prefConfig!!.framePacingWarpFactor > 0)
 {
 chosenFrameRate *= prefConfig!!.framePacingWarpFactor
 }
@@ -1548,7 +1549,7 @@ LimeLog.info(("Nova: Auto Safe launch resolution " + displayWidth + "x" + displa
 displayWidth = autoSafeResolution!!.width
 displayHeight = autoSafeResolution!!.height
 }
-if (launchResolvedProfileTrusted && autoSafeTargetFps > 0f)
+if (exactMediaCadence && autoSafeTargetFps > 0f)
 {
 if (Math.abs(autoSafeTargetFps - launchRefreshRate) > 0.5f)
 {

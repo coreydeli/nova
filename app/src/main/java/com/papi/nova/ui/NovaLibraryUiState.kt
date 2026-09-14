@@ -116,6 +116,7 @@ enum class NovaLibraryHeroPrimaryAction {
     RESUME,
     WATCH,
     OPEN_DETAIL,
+    OPEN_SPACE,
     MANAGE_LIBRARY,
     CLEAR_FILTERS
 }
@@ -642,7 +643,7 @@ object NovaLibraryUiStateMapper {
             if (game.sourceLabel.isNotBlank()) add(game.sourceLabel)
             if (game.runtimeLabel.isNotBlank()) add(game.runtimeLabel)
         }.distinct()
-        val subtitle = if (isSpace) "Gaming space" else game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
+        val subtitle = if (isSpace) "Gaming Space" else game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
         val actionContext = when (reason) {
             NovaLibraryHeroReason.LAST_PLAYED -> "Continue"
             NovaLibraryHeroReason.FIRST_FILTERED -> if (eyebrow == "Filtered library") "Filtered" else "Ready"
@@ -662,20 +663,18 @@ object NovaLibraryUiStateMapper {
             title = game.name,
             subtitle = subtitle,
             caption = if (isSpace) "Your own sign-ins, games, and saves. Manage device access in Spaces in Polaris." else caption,
-            eyebrow = if (isSpace) "Your space" else eyebrow,
-            // This opens the game's window; it does not start a stream. It said
-            // "Launch" while its action was OPEN_DETAIL -- the one hero whose label
-            // disagreed with what it does. The action is the deliberate half: the
-            // detail window is where you decide how to play, so the hero gets you there.
-            actionLabel = if (isSpace) "Open space" else "Open",
+            eyebrow = if (isSpace) "Your Space" else eyebrow,
+            // Spaces open through their dedicated guarded launch flow. Ordinary
+            // games retain the details window for choosing how to play.
+            actionLabel = if (isSpace) "Open Space" else "Open",
             badges = badges,
             reason = reason,
-            primaryAction = NovaLibraryHeroPrimaryAction.OPEN_DETAIL,
+            primaryAction = if (isSpace) NovaLibraryHeroPrimaryAction.OPEN_SPACE else NovaLibraryHeroPrimaryAction.OPEN_DETAIL,
             supportingLine = listOf(actionContext, subtitle)
                 .filter { it.isNotBlank() }
                 .joinToString(" • "),
             artworkFallbackTitle = game.name,
-            artworkFallbackSubtitle = if (isSpace) "Gaming space" else fallbackSubtitle
+            artworkFallbackSubtitle = if (isSpace) "Gaming Space" else fallbackSubtitle
         )
     }
 
