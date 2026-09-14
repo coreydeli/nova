@@ -42,6 +42,11 @@ class NvConnection(
     serverCert: X509Certificate?,
 ) {
     private val context: ConnectionContext = ConnectionContext()
+
+    /** The host's explanation for the last refused launch, for the launch sheet; null when it sent none. */
+    @Volatile
+    var lastHostRefusal: HostRefusal? = null
+        private set
     private val isMonkey: Boolean
 
     init {
@@ -163,6 +168,7 @@ class NvConnection(
 
     @Throws(XmlPullParserException::class, IOException::class)
     private fun startApp(): Boolean {
+        lastHostRefusal = null
         val streamConfig = context.streamConfig!!
         val listener = context.connListener!!
         val h = NvHTTP(context.serverAddress!!, context.httpsPort, uniqueId, context.serverCert, cryptoProvider)
@@ -307,6 +313,7 @@ class NvConnection(
                     return quitAndLaunch(h, context)
                 }
             } catch (e: HostHttpResponseException) {
+                lastHostRefusal = HostRefusal.from(e)
                 if (e.getErrorCode() == 470) {
                     listener.displayMessage(
                         "This session wasn't started by this device," +
@@ -377,6 +384,7 @@ class NvConnection(
                 return false
             }
         } catch (e: HostHttpResponseException) {
+            lastHostRefusal = HostRefusal.from(e)
             if (e.getErrorCode() == 470 || e.getErrorCode() == 599) {
                 listener.displayMessage(
                     "This session wasn't started by this device," +
@@ -479,6 +487,7 @@ class NvConnection(
                     }
                     connectionListener.stageComplete(appName)
                 } catch (e: HostHttpResponseException) {
+                    lastHostRefusal = HostRefusal.from(e)
                     e.printStackTrace()
                     connectionListener.displayMessage(e.message)
                     retry = connectionListener.stageFailed(appName, 0, e.getErrorCode())
