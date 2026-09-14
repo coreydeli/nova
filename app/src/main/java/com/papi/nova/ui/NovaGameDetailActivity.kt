@@ -2460,7 +2460,7 @@ internal fun resolveSavedResolutionChoice(
  * what this panel can actually present: see [NovaDisplayFpsCapability.allowedFpsValues],
  * the same threshold every other FPS-offering surface in the app uses.
  */
-private val NOVA_FRAME_RATE_CHOICES = listOf(30, 60, 90, 120)
+private val NOVA_FRAME_RATE_CHOICES: List<Int> = NovaDisplayFpsCapability.STANDARD_FPS_VALUES
 
 /**
  * The fps that actually launches: an explicit Frame Rate row pin, or -- only when there
