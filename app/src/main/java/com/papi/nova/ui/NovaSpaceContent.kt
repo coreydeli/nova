@@ -171,9 +171,9 @@ internal fun NovaSpaceContent(
                             .onFocusChanged { if (it.isFocused) lastAction = "open" }.testTag("nova-space-primary"),
                     )
                     NovaActionButton(
-                        text = stringResource(R.string.nova_space_stream_settings), onClick = onSettings, minHeight = 52.dp,
+                        text = stringResource(R.string.nova_space_stream_settings), onClick = { lastAction = "settings"; onSettings() }, minHeight = 52.dp,
                         modifier = Modifier.focusRequester(settingsFocus)
-                            .onFocusChanged { if (it.isFocused) lastAction = "settings" }.testTag("nova-space-settings"),
+                            .onFocusChanged { if (it.isFocused && primaryEnabled) lastAction = "settings" }.testTag("nova-space-settings"),
                     )
                     onChoose?.let { action ->
                         NovaActionButton(text = "Choose Space", onClick = action, minHeight = 52.dp,

@@ -154,4 +154,14 @@ class NovaSpaceComposeTest {
         compose.onNodeWithTag("nova-space-primary").assertIsNotEnabled()
         compose.onNodeWithTag("nova-space-choose").assertIsEnabled()
     }
+
+    @Test fun firstStatusCheckReturnsFocusToOpenWhenReady() {
+        val ready = mutableStateOf(false)
+        compose.setContent { NovaComposeTheme {
+            NovaSpaceContent(space, "Gaming PC", null, {}, {}, {}, primaryEnabled = ready.value)
+        } }
+        awaitFocus("nova-space-settings")
+        compose.runOnIdle { ready.value = true }
+        awaitFocus("nova-space-primary")
+    }
 }
