@@ -62,6 +62,27 @@ class NovaSpaceUiStateTest {
         assertEquals(NovaSpaceUiState.Request(1280, 800, 120f), NovaSpaceUiState.request(next, null, 1280, 800, 120f))
     }
 
+    @Test fun autoChoicesAcceptTheHostDisplayContract() {
+        val accepted = WorkerLaunchContract.Contract("space", 1920, 1080, 60, 8000)
+        val device = NovaSpaceUiState.resolutionPlanner(1280, 800, 120f).visibleChoices.first()
+        assertNull(NovaSpaceUiState.constrainedRequest(null, null, accepted))
+        assertNull(NovaSpaceUiState.constrainedRequest(device, null, accepted))
+        assertNull(NovaSpaceUiState.constrainedRequest(null, 120, null))
+    }
+
+    @Test fun explicitFrameRateCannotSilentlyLaunchAtAnotherRate() {
+        val accepted = WorkerLaunchContract.Contract("space", 1920, 1080, 60, 8000)
+        assertEquals(accepted, NovaSpaceUiState.constrainedRequest(null, 120, accepted))
+        assertNull(NovaSpaceUiState.constrainedRequest(null, 60, accepted))
+    }
+
+    @Test fun explicitResolutionCannotSilentlyLaunchAtAnotherSize() {
+        val accepted = WorkerLaunchContract.Contract("space", 1920, 1080, 60, 8000)
+        val choices = NovaSpaceUiState.resolutionPlanner(1920, 1080, 60f).visibleChoices
+        assertEquals(accepted, NovaSpaceUiState.constrainedRequest(choices[1], null, accepted))
+        assertNull(NovaSpaceUiState.constrainedRequest(choices[2], 60, accepted))
+    }
+
     private fun session(owned: Boolean) = NovaLibraryActiveSessionUiState(
         gameId = WorkerLaunchContract.APP_ID, gameUuid = WorkerLaunchContract.APP_UUID,
         gameName = "Living Room", ownerDeviceName = "Handheld", ownedByClient = owned,

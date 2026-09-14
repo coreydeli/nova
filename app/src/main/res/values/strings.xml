@@ -1685,6 +1685,8 @@
     <string name="nova_decoder_no_av1">No AV1 decoder found</string>
     <string name="nova_space_your_space">Your Space</string>
     <string name="nova_space_open">Open Space</string>
+    <string name="nova_space_host_settings_required">Check Stream Settings</string>
+    <string name="nova_space_host_constraint">Polaris is offering %1$d × %2$d at %3$d FPS for this device. Choose Auto for Frame Rate and Device Settings for Resolution, or update this device’s display settings in Polaris.</string>
     <string name="nova_space_resume">Resume Space</string>
     <string name="nova_space_stream_settings">Stream Settings</string>
     <string name="nova_space_streaming_preset">Streaming Preset</string>

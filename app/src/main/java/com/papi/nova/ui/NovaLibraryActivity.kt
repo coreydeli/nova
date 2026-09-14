@@ -972,24 +972,28 @@ class NovaLibraryActivity : NovaActivity() {
                         "effectiveFps=" + (preflightOptimization?.optDouble("effective_target_fps", 0.0) ?: 0.0) + " " +
                         "displayMode=" + (preflightOptimization?.optString("display_mode", "") ?: "")
                 )
-                val syncedSettings = withContext(Dispatchers.IO) {
-                    NovaLaunchPreflight.push(
-                        apiClient = apiClient,
-                        clientSettings = clientSettings,
-                        usesVirtualDisplay = launchUsesVirtualDisplay,
-                        mirrorDesktop = launchMirrorsDesktop,
-                        resolvedMode = launchMode,
-                        // Paired settings describe the user's durable Nova
-                        // preferences. Preset-normalized values belong only to
-                        // the resolved launch envelope passed to Game below.
-                        width = preferences.width,
-                        height = preferences.height,
-                        fps = preferences.fps,
-                        bitrateKbps = preferences.bitrate
-                    )
-                }
-                if (syncedSettings == null) {
-                    LimeLog.warning("Nova: Preflight client settings sync failed; continuing launch")
+                // Space settings were accepted by the worker resolver. Writing
+                // ordinary device defaults here would replace that media contract.
+                if (!NovaSpaceUiState.isSpace(game)) {
+                    val syncedSettings = withContext(Dispatchers.IO) {
+                        NovaLaunchPreflight.push(
+                            apiClient = apiClient,
+                            clientSettings = clientSettings,
+                            usesVirtualDisplay = launchUsesVirtualDisplay,
+                            mirrorDesktop = launchMirrorsDesktop,
+                            resolvedMode = launchMode,
+                            // Paired settings describe the user's durable Nova
+                            // preferences. Preset-normalized values belong only to
+                            // the resolved launch envelope passed to Game below.
+                            width = preferences.width,
+                            height = preferences.height,
+                            fps = preferences.fps,
+                            bitrateKbps = preferences.bitrate
+                        )
+                    }
+                    if (syncedSettings == null) {
+                        LimeLog.warning("Nova: Preflight client settings sync failed; continuing launch")
+                    }
                 }
 
                 val app = NvApp(game.name, game.id, game.appId, game.hdrSupported)

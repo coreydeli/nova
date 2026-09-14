@@ -544,6 +544,11 @@ class NovaGameDetailActivity : NovaActivity() {
             )
         }
 
+        fun spaceConstraint() = if (spaceGame != null) NovaSpaceUiState.constrainedRequest(
+            chosenResolution, chosenFps,
+            com.papi.nova.manager.WorkerLaunchContract.parse(optimizationState.rawOptimization),
+        ) else null
+
         fun refreshUiState(preference: String = profilePreference) {
             uiState = buildUiState(currentGame, preference)
         }
@@ -782,6 +787,10 @@ class NovaGameDetailActivity : NovaActivity() {
                 NovaLaunchPreflightGate.READY -> Unit
             }
             pendingLaunch = false
+            if (spaceConstraint() != null) {
+                destination = NovaGameDetailDestination.PLAY_SETUP
+                return
+            }
             val decision = NovaDesktopSteamLaunchDecision.from(uiState, optimization)
             when {
                 // A choice of where to run belongs in the destination that
@@ -1482,6 +1491,7 @@ class NovaGameDetailActivity : NovaActivity() {
                         ?: launchPreferences.fps.toInt()).toDouble(),
                 )
                 if (spaceGame != null) {
+                    val constraint = spaceConstraint()
                     NovaSpaceContent(
                         game = currentGame,
                         hostName = serverName,
@@ -1491,14 +1501,17 @@ class NovaGameDetailActivity : NovaActivity() {
                         onBack = { if (!dismissActiveDetailDestination()) finish() },
                         showSettings = destination == NovaGameDetailDestination.PLAY_SETUP,
                         settingsRows = buildPlaySetupRows(),
-                        primaryEnabled = uiState.playEnabled && !pendingLaunch && !spaceLaunchDelivered,
+                        primaryEnabled = uiState.playEnabled && !pendingLaunch && !spaceLaunchDelivered && constraint == null,
                         primaryLabel = getString(when {
+                            constraint != null -> R.string.nova_space_host_settings_required
                             pendingLaunch -> R.string.nova_space_checking
                             optimizationState.preflightFailed -> R.string.nova_space_retry
                             optimizationState.reviewRequired && !reviewExpanded -> R.string.nova_space_review
                             else -> R.string.nova_space_open
                         }),
                         message = when {
+                            constraint != null -> getString(R.string.nova_space_host_constraint,
+                                constraint.width, constraint.height, constraint.fps)
                             reviewExpanded -> launchPreview.profileSummary?.noticeDetail
                                 ?.takeIf { it.isNotBlank() } ?: getString(R.string.nova_library_preflight_review_message, optimizationState.reviewReason)
                             optimizationState.preflightFailed -> getString(R.string.nova_game_detail_launch_preflight_unavailable)

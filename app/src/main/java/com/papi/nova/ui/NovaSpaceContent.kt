@@ -60,7 +60,7 @@ internal fun NovaSpaceContent(
     val backFocus = remember { FocusRequester() }
     val systemFocus = remember { FocusRequester() }
     var lastAction by rememberSaveable(game.id) { mutableStateOf("open") }
-    LaunchedEffect(showSettings, focusEpoch, focusEnabled) {
+    LaunchedEffect(showSettings, focusEpoch, focusEnabled, primaryEnabled, inUse) {
         if (focusEnabled) {
             delay(NOVA_FIRST_FOCUS_SETTLE_MS)
             val target = when {

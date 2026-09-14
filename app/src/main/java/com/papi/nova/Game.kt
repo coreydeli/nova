@@ -1631,6 +1631,12 @@ displayHeight
 .setPersistGamepadsAfterDisconnect(!prefConfig!!.multiController)
 .build()
 
+if (workerLaunch != null) {
+LimeLog.info("Nova: Space media contract ${workerLaunch.width}x${workerLaunch.height}x${workerLaunch.fps} " +
+"launchRate=${config.getLaunchRefreshRate()} announceRate=${config.getRefreshRate()} " +
+"displayRateX100=${config.getClientRefreshRateX100()}")
+}
+
 queuePolarisClientSettingsSnapshot(null)
 
  // Initialize the connection

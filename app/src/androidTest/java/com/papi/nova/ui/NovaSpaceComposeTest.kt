@@ -106,4 +106,19 @@ class NovaSpaceComposeTest {
         compose.onNodeWithText("Where It Runs").assertDoesNotExist()
         compose.onNodeWithText("Your Space").assertExists()
     }
+
+    @Test fun hostConstraintKeepsSettingsReachableWithAController() {
+        val ready = mutableStateOf(true)
+        compose.setContent {
+            NovaComposeTheme {
+                NovaSpaceContent(space, "Gaming PC", null, {}, {}, {}, primaryEnabled = ready.value,
+                    message = if (ready.value) null else "Polaris is offering 60 FPS for this device.")
+            }
+        }
+        awaitFocus("nova-space-primary")
+        compose.runOnIdle { ready.value = false }
+        awaitFocus("nova-space-settings")
+        compose.onNodeWithTag("nova-space-primary").assertIsNotEnabled()
+        compose.onNodeWithTag("nova-space-message").assertIsDisplayed()
+    }
 }

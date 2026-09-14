@@ -686,7 +686,10 @@ class NovaLaunchSourceGuardTest {
             launchGame.contains("val launchResolution = StreamSyncManager.resolveAutoSafeResolution(") &&
                 launchGame.contains("val launchFps = StreamSyncManager.resolveAutoSafeTargetFps(")
         )
-        val pairedSettingsPush = launchGame.substringAfter("NovaLaunchPreflight.push(").substringBefore("\n                    )")
+        val pairedSettingsPush = launchGame.substringAfter("NovaLaunchPreflight.push(").substringBefore("val app = NvApp")
+        val spaceGuard = launchGame.indexOf("if (!NovaSpaceUiState.isSpace(game))")
+        assertTrue("a Space launch must skip the ordinary paired-settings write",
+            spaceGuard >= 0 && spaceGuard < launchGame.indexOf("NovaLaunchPreflight.push("))
         assertTrue(
             "preset-normalized launch fields must not become durable paired-client settings",
             pairedSettingsPush.contains("width = preferences.width") &&

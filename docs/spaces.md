@@ -40,6 +40,11 @@ For 120 FPS, select **Frame Rate**, then **120 FPS** when offered. The display m
 support it, and the host must accept the requested stream. Choosing 120 FPS is not
 a guarantee that the game itself will render 120 frames per second.
 
+If Polaris offers a different resolution or frame rate from your explicit choice,
+Nova shows the host settings and waits before opening the Space. Choose **Auto**
+for **Frame Rate** and **Device Settings** for **Resolution** to follow the host,
+or update the device’s display settings in Polaris and retry.
+
 Select **Done** to return without launching. Codec, bitrate, and other device-wide
 preferences remain available through **System**, then Nova's streaming settings.
 

@@ -29,6 +29,17 @@ internal object NovaSpaceUiState {
 
     data class Request(val width: Int, val height: Int, val fps: Float)
 
+    /** An explicit choice must not silently become a different stream at launch. */
+    fun constrainedRequest(
+        choice: NovaDisplayResolutionChoice?, fps: Int?, accepted: WorkerLaunchContract.Contract?,
+    ): WorkerLaunchContract.Contract? {
+        accepted ?: return null
+        val mode = choice?.takeUnless { it.id == "space_device" }?.targetMode?.split('x')
+        val resolutionChanged = mode != null &&
+            (mode.getOrNull(0)?.toIntOrNull() != accepted.width || mode.getOrNull(1)?.toIntOrNull() != accepted.height)
+        return accepted.takeIf { resolutionChanged || fps != null && fps != it.fps }
+    }
+
     fun request(choice: NovaDisplayResolutionChoice?, fps: Int?, width: Int, height: Int, defaultFps: Float): Request {
         val mode = choice?.targetMode?.split('x').orEmpty()
         return Request(mode.getOrNull(0)?.toIntOrNull() ?: width,
