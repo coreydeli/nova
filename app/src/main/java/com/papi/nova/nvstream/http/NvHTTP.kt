@@ -975,7 +975,10 @@ class NvHTTP @Throws(IOException::class) constructor(
                     statusCode = 418
                     statusMsg = "Missing audio capture device. Reinstall GeForce Experience."
                 }
-                throw HostHttpResponseException(statusCode, statusMsg)
+                // Polaris says why it refused, as attributes Moonlight ignores.
+                val hostCode = xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "error_code")?.trim()?.takeIf { it.isNotEmpty() }
+                val hostAction = xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "error_action")?.trim()?.takeIf { it.isNotEmpty() }
+                throw HostHttpResponseException(statusCode, statusMsg, hostCode, hostAction)
             }
         }
 
