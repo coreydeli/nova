@@ -242,6 +242,7 @@ data class PolarisGame(
         "lutris" -> "Lutris"
         "heroic" -> "Heroic"
         "manual" -> "Manual"
+        "emulator" -> "Emulator"
         else -> ""
     }
     val platformLabel: String get() = platformLabelFromServer.ifBlank {

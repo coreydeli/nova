@@ -14,6 +14,26 @@ class PolarisGameContractTest {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     @Test
+    fun emulatorEntriesReadTheHostLabels() {
+        val game = json.decodeFromString<PolarisGame>(
+            """
+            {"id":"g1","app_id":7,"name":"Game One","source":"emulator","platform":"switch","runtime":"eden","platform_label":"Nintendo Switch","runtime_label":"Eden"}
+            """
+        )
+        assertEquals("Emulator", game.sourceLabel)
+        assertEquals("Nintendo Switch", game.platformLabel)
+        assertEquals("Eden", game.runtimeLabel)
+        assertEquals("Emulator · Nintendo Switch · Eden", game.sourceRuntimeLabel)
+
+        val custom = json.decodeFromString<PolarisGame>(
+            """
+            {"id":"g2","app_id":8,"name":"Game Two","source":"emulator","runtime":"custom","runtime_label":"Custom emulator"}
+            """
+        )
+        assertEquals("Emulator · Custom emulator", custom.sourceRuntimeLabel)
+    }
+
+    @Test
     fun decodesPolarisGameSnakeCaseContract() {
         val game = json.decodeFromString<PolarisGame>(
             """
