@@ -1556,11 +1556,11 @@ class NovaComposeSourceGuardTest {
         )
         assertTrue(
             "stale launch recovery should clear on refresh, detail navigation, and valid launch/resume paths",
-            source.contains("loadErrorMessage = null\n        launchErrorMessage = null") &&
-                source.contains("private fun showGameDetail(game: PolarisGame) {\n        launchErrorMessage = null") &&
-                source.contains("private fun launchGame(") &&
-                source.contains("private fun resumeActiveSession(") &&
-                source.split("launchErrorMessage = null").size >= 5
+            source.blockStartingAt("private fun loadGames(").contains("launchErrorMessage = null") &&
+                source.contains("private fun showGameDetail(game: PolarisGame) = showDetail(game)") &&
+                source.blockStartingAt("private fun showDetail(").contains("launchErrorMessage = null") &&
+                source.blockStartingAt("private fun launchGame(").contains("launchErrorMessage = null") &&
+                source.blockStartingAt("private fun resumeActiveSession(").contains("launchErrorMessage = null")
         )
     }
 
