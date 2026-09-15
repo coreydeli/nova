@@ -328,6 +328,16 @@ class PolarisApiClient @JvmOverloads constructor(
         fun isSafeArtworkGameId(gameId: String): Boolean =
             SAFE_GAME_ID.matches(gameId) && gameId != "." && gameId != ".."
 
+        internal fun artworkLibraryUpdatePath(gameId: String): String {
+            if (gameId.startsWith("space.")) {
+                val identity = requireNotNull(com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(gameId))
+                require(identity.second != "big-picture-v1")
+                return "/games/$gameId/space-artwork/resolve"
+            }
+            require(isSafeArtworkGameId(gameId))
+            return "/games/$gameId/artwork/resolve"
+        }
+
         @JvmStatic
         fun artworkPresentationKey(game: PolarisGame, kind: String): String {
             val normalizedKind = kind.trim().lowercase()
@@ -2566,11 +2576,11 @@ class PolarisApiClient @JvmOverloads constructor(
 
 
     fun updateArtworkForLibrary(gameId: String): PolarisArtworkUpdateResult {
-        require(isSafeArtworkGameId(gameId))
+        val path = artworkLibraryUpdatePath(gameId)
         val body = buildArtworkLibraryUpdateBody()
         try {
             val request = Request.Builder()
-                .url("$baseUrl/games/$gameId/artwork/resolve")
+                .url("$baseUrl$path")
                 .post(okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), body.toString()))
                 .build()
             return executeArtwork(request).use { response ->

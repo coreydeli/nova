@@ -2499,6 +2499,18 @@ class PolarisApiClientParsingTest {
         assertNotNull(untouched.playTime)
         assertEquals(0L, untouched.playTime?.seconds)
     }
+    @Test fun artworkLibraryRefreshRoutesSpaceGamesWithoutWeakeningOtherArtworkIds() {
+        assertEquals("/games/space.Alex_1.870780/space-artwork/resolve",
+            PolarisApiClient.artworkLibraryUpdatePath("space.Alex_1.870780"))
+        assertEquals("/games/123e4567-e89b-12d3-a456-426614174000/artwork/resolve",
+            PolarisApiClient.artworkLibraryUpdatePath("123e4567-e89b-12d3-a456-426614174000"))
+        listOf("space.alex.big-picture-v1", "space.alex.0", "space.alex.4294967296",
+            "space.alex.870780/../resolve", "space.alex.870780%2fprivate", "space..870780").forEach {
+            assertTrue(runCatching { PolarisApiClient.artworkLibraryUpdatePath(it) }.isFailure)
+        }
+        assertFalse(PolarisApiClient.isSafeArtworkGameId("../private"))
+    }
+
     @Test fun spaceArtworkUsesThePairedHostAndExactSpaceIdentity() {
         val game = PolarisGame(id = "space.alex.870780", name = "Control",
             space = PolarisGame.SpaceContext("alex", "Alex", "870780"))
