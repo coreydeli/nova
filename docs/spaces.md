@@ -114,3 +114,16 @@ compare with downloads, builds, and updates paused. Change one thing at a time.
 The [Polaris troubleshooting steps](https://github.com/papi-ux/polaris/blob/master/docs/spaces.md#check-sound-and-stuttering)
 explain what to retain for Doctor & Support. Audio reliability is still being
 validated for the preview.
+
+## Current Validation
+
+Two configured Spaces completed a 15 minute test at 1080p and 60 FPS, with
+Control Ultimate Edition on a wired Shield and PEAK on a Wi-Fi RP6. The listener
+reported clean Shield audio; the RP6 continued to record audio underruns.
+Reopening the RP6 Space used its retained Steam home while the Shield kept
+streaming. Reopening starts a new game session after disconnect.
+
+The [September 15 acceptance report](https://github.com/papi-ux/polaris/blob/master/docs/research/container-multiseat-acceptance-20260915.md)
+records the tested builds and limits. It does not establish sustained 120 or
+240 FPS gameplay, a complete first installation from published artifacts, or
+reliable audio on every client.

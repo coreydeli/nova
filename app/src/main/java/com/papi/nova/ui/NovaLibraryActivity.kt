@@ -208,6 +208,8 @@ class NovaLibraryActivity : NovaActivity() {
     private var activeSystemMenu by mutableStateOf(false)
     private var spaceFocusEpoch by mutableStateOf(0)
     private var spaceOpenPending by mutableStateOf(false)
+    private var spaceOpenJob: Job? = null
+    private var spaceOpenEpoch = 0
     private var spacesSnapshot by mutableStateOf<PolarisSpaces?>(null)
     private var spacesChecked by mutableStateOf(false)
     private var spacesError by mutableStateOf<String?>(null)
@@ -430,7 +432,6 @@ class NovaLibraryActivity : NovaActivity() {
     override fun onResume() {
         super.onResume()
         spaceFocusEpoch++
-        spaceOpenPending = false
         startSpacesPolling()
         if (recreateForThemeChangeIfNeeded()) return
         revealControllerHints(NovaControllerHintChromeEvent.EXPLICIT_REVEAL)
@@ -443,13 +444,23 @@ class NovaLibraryActivity : NovaActivity() {
     }
 
     override fun onPause() {
+        cancelPendingSpaceOpen()
         spacesEpoch++; spacesPoll?.cancel(); spacesPoll = null
         super.onPause()
     }
 
+    private fun cancelPendingSpaceOpen() {
+        // Retire the user's open action even if its blocking HTTP call completes
+        // after returning to Library or choosing another Space.
+        spaceOpenEpoch++
+        spaceOpenJob?.cancel()
+        spaceOpenJob = null
+        spaceOpenPending = false
+    }
+
     private fun startSpacesPolling() {
         spacesPoll?.cancel()
-        if (choosingSpace || !::apiClient.isInitialized) return
+        if (choosingSpace || spaceOpenPending || !::apiClient.isInitialized) return
         val epoch = ++spacesEpoch
         spacesPoll = lifecycleScope.launch {
             while (isActive) {
@@ -470,6 +481,12 @@ class NovaLibraryActivity : NovaActivity() {
             if (epoch == spacesEpoch) { spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again." }
             false
         }
+    }
+
+    private fun showSpaceChooser() {
+        cancelPendingSpaceOpen()
+        chooseSpaceVisible = true
+        startSpacesPolling()
     }
 
     private fun chooseSpace(id: String) {
@@ -864,16 +881,19 @@ class NovaLibraryActivity : NovaActivity() {
             (spacesSnapshot != null && (!spacesSnapshot!!.available || spacesSnapshot!!.selected?.state !in setOf("ready", "running")))) return
         val expected = spacesSnapshot?.selectedId
         spaceOpenPending = true; spacesEpoch++; spacesPoll?.cancel()
-        lifecycleScope.launch {
+        val openEpoch = ++spaceOpenEpoch
+        spaceOpenJob = lifecycleScope.launch {
             try {
                 val fresh = withContext(Dispatchers.IO) { apiClient.getSpaces() }
+                if (openEpoch != spaceOpenEpoch) return@launch
                 spacesSnapshot = fresh; spacesChecked = true; spacesError = null
                 if (fresh?.selectedId != expected || (fresh != null && (!fresh.available || fresh.selected?.state !in setOf("ready", "running")))) {
                     launchErrorMessage = "Space status changed. Review it before opening."
                     return@launch
                 }
                 val session = withContext(Dispatchers.IO) { queryActiveSession() }
-                if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@launch
+                if (openEpoch != spaceOpenEpoch || isFinishing || isDestroyed ||
+                    !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@launch
                 when (NovaSpaceUiState.availability(game, session)) {
                     NovaSpaceUiState.Availability.RESUMABLE -> resumeActiveSession(requireNotNull(session))
                     NovaSpaceUiState.Availability.IN_USE -> {
@@ -883,10 +903,19 @@ class NovaLibraryActivity : NovaActivity() {
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again."
+                // A blocking call can fail after cancellation. Ignore its error
+                // just as we ignore a successful result from a retired request.
+                if (openEpoch == spaceOpenEpoch) {
+                    spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again."
+                }
             } finally {
-                spaceOpenPending = false
-                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startSpacesPolling()
+                // A retired request must not clear a newer action's pending state
+                // or restart polling over that action.
+                if (openEpoch == spaceOpenEpoch) {
+                    spaceOpenJob = null
+                    spaceOpenPending = false
+                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startSpacesPolling()
+                }
             }
         }
     }
@@ -1459,7 +1488,7 @@ class NovaLibraryActivity : NovaActivity() {
                             game = space,
                             displayName = spacesSnapshot?.selected?.name,
                             spaceState = spacesSnapshot?.selected?.state,
-                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1) ({ chooseSpaceVisible = true }) else null,
+                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1) (::showSpaceChooser) else null,
                             hostName = serverName.orEmpty().ifBlank { serverHost },
                             activeSession = activeSession,
                             onOpen = { openSpace(space) },
