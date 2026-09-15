@@ -27,6 +27,12 @@ class NvApp {
         private set
     var runtime = ""
         private set
+    // The host's own names for platform and runtime, for values the maps below do not know
+    // ("Nintendo Switch", "Eden").
+    var platformLabelFromServer = ""
+        private set
+    var runtimeLabelFromServer = ""
+        private set
     var steamAppid = ""
         private set
     private var category = ""
@@ -71,6 +77,8 @@ class NvApp {
         val nextLauncherDetail = normalizeToken(game.launcherDetail)
         val nextPlatform = normalizeToken(game.platform)
         val nextRuntime = normalizeToken(game.runtime)
+        val nextPlatformLabel = safeString(game.platformLabelFromServer)
+        val nextRuntimeLabel = safeString(game.runtimeLabelFromServer)
         val nextSteamAppid = safeString(game.steamAppid)
         val nextCategory = normalizeToken(game.category)
 
@@ -79,6 +87,8 @@ class NvApp {
             launcherDetail != nextLauncherDetail ||
             platform != nextPlatform ||
             runtime != nextRuntime ||
+            platformLabelFromServer != nextPlatformLabel ||
+            runtimeLabelFromServer != nextRuntimeLabel ||
             steamAppid != nextSteamAppid ||
             category != nextCategory
 
@@ -87,6 +97,8 @@ class NvApp {
         launcherDetail = nextLauncherDetail
         platform = nextPlatform
         runtime = nextRuntime
+        platformLabelFromServer = nextPlatformLabel
+        runtimeLabelFromServer = nextRuntimeLabel
         steamAppid = nextSteamAppid
         category = nextCategory
         return changed
@@ -98,25 +110,30 @@ class NvApp {
             "lutris" -> "Lutris"
             "heroic" -> "Heroic"
             "manual" -> "Manual"
+            "emulator" -> "Emulator"
             else -> ""
         }
 
     val platformLabel: String
-        get() = when (platform) {
-            "linux" -> "Linux"
-            "windows" -> "Windows"
-            "macos" -> "macOS"
-            else -> ""
+        get() = platformLabelFromServer.ifBlank {
+            when (platform) {
+                "linux" -> "Linux"
+                "windows" -> "Windows"
+                "macos" -> "macOS"
+                else -> ""
+            }
         }
 
     val runtimeLabel: String
-        get() = when (runtime) {
-            "native" -> "Native"
-            "proton" -> "Proton"
-            "wine" -> "Wine"
-            "steam" -> "Steam"
-            "umu" -> "UMU"
-            else -> ""
+        get() = runtimeLabelFromServer.ifBlank {
+            when (runtime) {
+                "native" -> "Native"
+                "proton" -> "Proton"
+                "wine" -> "Wine"
+                "steam" -> "Steam"
+                "umu" -> "UMU"
+                else -> ""
+            }
         }
 
     val metadataLabel: String

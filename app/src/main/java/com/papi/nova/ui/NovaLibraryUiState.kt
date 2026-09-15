@@ -918,6 +918,7 @@ object NovaLibraryUiStateMapper {
             "lutris" -> "Lutris"
             "gog" -> "GOG"
             "epic" -> "Epic"
+            "emulator" -> "Emulator"
             else -> raw
                 .replace('_', ' ')
                 .replace('-', ' ')

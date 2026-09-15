@@ -1306,6 +1306,7 @@ class NovaLibraryActivity : NovaActivity() {
             "steam" -> "Steam"
             "lutris" -> "Lutris"
             "heroic" -> "Heroic"
+            "emulator" -> "Emulator"
             else -> source
                 .replace('_', ' ')
                 .replace('-', ' ')

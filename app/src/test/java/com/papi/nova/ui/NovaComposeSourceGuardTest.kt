@@ -3375,4 +3375,18 @@ class NovaComposeSourceGuardTest {
             library.contains("/#/config#av")
         )
     }
+
+    @Test
+    fun emulatorSourceIsLabelledInEveryLegacyMap() {
+        listOf(
+            "src/main/java/com/papi/nova/nvstream/http/NvApp.kt",
+            "src/main/java/com/papi/nova/ui/NovaLibraryActivity.kt",
+            "src/main/java/com/papi/nova/ui/NovaLibraryUiState.kt",
+        ).forEach { path ->
+            assertTrue("$path must label the emulator source", readSource(path).contains("\"emulator\" -> \"Emulator\""))
+        }
+        val legacyApp = readSource("src/main/java/com/papi/nova/nvstream/http/NvApp.kt")
+        assertTrue("the legacy grid must prefer the host's platform label", legacyApp.contains("platformLabelFromServer.ifBlank"))
+        assertTrue("the legacy grid must prefer the host's runtime label", legacyApp.contains("runtimeLabelFromServer.ifBlank"))
+    }
 }
