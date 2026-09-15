@@ -24,4 +24,15 @@ class PolarisSpacesTest {
         val result = PolarisSpaces.parse("""{"schema":1,"status":true,"enabled":false,"available":false,"can_switch":false,"selected_space_id":"","spaces":[]}""")
         assertNotNull(result); assertNull(result?.selected)
     }
+    @Test fun desktopChoiceRequiresAnExplicitBooleanGrant() {
+        val desktop = valid.replace("\"selected_space_id\":\"a\"", "\"selected_space_id\":\"desktop\"")
+            .replace("\"selected\":true", "\"selected\":false")
+        assertNull(PolarisSpaces.parse(desktop))
+        val allowed = desktop.replace("\"schema\":1", "\"schema\":1,\"desktop_allowed\":true")
+        val parsed = requireNotNull(PolarisSpaces.parse(allowed))
+        assertEquals("desktop", parsed.selectedId); assertNull(parsed.selected)
+        assertNull(PolarisSpaces.parse(allowed.replace("\"desktop_allowed\":true", "\"desktop_allowed\":\"true\"")))
+        assertNull(PolarisSpaces.parse(valid.replace("\"id\":\"a\"", "\"library_enabled\":\"true\",\"id\":\"a\"")))
+    }
+
 }

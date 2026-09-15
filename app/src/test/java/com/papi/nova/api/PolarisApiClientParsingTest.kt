@@ -2499,4 +2499,14 @@ class PolarisApiClientParsingTest {
         assertNotNull(untouched.playTime)
         assertEquals(0L, untouched.playTime?.seconds)
     }
+    @Test fun spaceArtworkUsesThePairedHostAndExactSpaceIdentity() {
+        val game = PolarisGame(id = "space.alex.870780", name = "Control",
+            space = PolarisGame.SpaceContext("alex", "Alex", "870780"))
+        assertEquals("https://polaris.lan:47984/polaris/v1/games/space.alex.870780/space-artwork/hero",
+            PolarisApiClient.selectArtworkUrl("polaris.lan", 47984, game, "hero"))
+        assertNull(PolarisApiClient.selectArtworkUrl("polaris.lan", 47984,
+            game.copy(id = "space.sam.870780"), "poster"))
+        assertNull(PolarisApiClient.selectArtworkUrl("polaris.lan", 47984, game, "../private"))
+    }
+
 }

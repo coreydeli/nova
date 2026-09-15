@@ -10,13 +10,14 @@ internal object NovaSpaceUiState {
     fun isSpace(game: PolarisGame): Boolean = WorkerLaunchContract.isProfileApp(game.id)
 
     fun singleSpace(games: List<PolarisGame>): PolarisGame? =
-        games.singleOrNull()?.takeIf(::isSpace)
+        games.singleOrNull()?.takeIf { WorkerLaunchContract.isLegacyProfileApp(it.id) }
 
     fun matchingSession(
         game: PolarisGame,
         session: NovaLibraryActiveSessionUiState?,
     ): NovaLibraryActiveSessionUiState? = session?.takeIf {
         isSpace(game) && WorkerLaunchContract.isProfileApp(it.gameUuid) &&
+            (WorkerLaunchContract.isLegacyProfileApp(game.id) || it.gameUuid == game.id) &&
             it.gameId == WorkerLaunchContract.APP_ID
     }
 

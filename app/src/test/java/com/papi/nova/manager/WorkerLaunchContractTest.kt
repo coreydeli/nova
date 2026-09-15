@@ -141,4 +141,25 @@ class WorkerLaunchContractTest {
         assertFalse(LaunchTopologyEnvelope.matches(payload, WorkerLaunchContract.APP_UUID,
             "gamescope_stream", true, true, false))
     }
+
+    @Test fun libraryLaunchCannotTransplantAnotherSpaceOrTitle() {
+        val payload = fixture()
+        val id = "12345678-1234-4234-8234-123456789abc"
+        val identity = "space.$id.3527290"
+        payload.getJSONObject("worker_profile").put("target", "3527290").put("game_identity", identity)
+        assertNotNull(WorkerLaunchContract.parse(payload))
+        assertTrue(honors(payload, app = identity))
+        assertFalse(honors(payload, app = "space.other.3527290"))
+        assertFalse(honors(payload, app = "space.$id.870780"))
+        assertFalse(honors(payload, app = WorkerLaunchContract.APP_UUID))
+        payload.getJSONObject("worker_profile").put("game_identity", "space.other.3527290")
+        assertNull(WorkerLaunchContract.parse(payload))
+    }
+
+    @Test fun libraryTargetsAreBoundedIdentifiersRatherThanCommands() {
+        assertEquals("Alex" to "3527290", WorkerLaunchContract.libraryIdentity("space.Alex.3527290"))
+        assertNotNull(WorkerLaunchContract.libraryIdentity("space.Alex.big-picture-v1"))
+        listOf("space.Alex.0", "space.Alex.01", "space.Alex.4294967296", "space.Alex.1;cmd", "space.Alex.1.extra")
+            .forEach { assertNull(it, WorkerLaunchContract.libraryIdentity(it)) }
+    }
 }

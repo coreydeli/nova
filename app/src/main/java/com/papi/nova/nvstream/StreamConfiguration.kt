@@ -31,6 +31,7 @@ class StreamConfiguration private constructor() {
     private var profilePreference = "auto"
     private var resolvedProfile = false
     private var workerProfileId = ""
+    private var workerTarget = ""
     private var mirrorDesktop = false
     private var streamMode = ""
     private var encoderBackend = ""
@@ -177,6 +178,11 @@ class StreamConfiguration private constructor() {
             return this
         }
 
+        fun setWorkerTarget(target: String): Builder {
+            require(target.isEmpty() || com.papi.nova.manager.WorkerLaunchContract.validTarget(target))
+            config.workerTarget = target
+            return this
+        }
         fun setWorkerProfileId(profileId: String): Builder {
             config.workerProfileId = profileId
             return this
@@ -281,6 +287,7 @@ class StreamConfiguration private constructor() {
 
     fun getResolvedProfile(): Boolean = resolvedProfile
     fun getWorkerProfileId(): String = workerProfileId
+    fun getWorkerTarget(): String = workerTarget
 
     fun getMirrorDesktop(): Boolean = mirrorDesktop
 

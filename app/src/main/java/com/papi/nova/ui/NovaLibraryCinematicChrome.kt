@@ -67,7 +67,8 @@ internal fun NovaLibraryCinematicBackdrop(
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
     val backdropTarget = game?.let { game ->
-        val hasCachedHero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO)?.cached == true
+        val hasCachedHero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO)?.cached == true ||
+            (game.space != null && game.space?.target != "big-picture-v1")
         val artworkKind = if (hasCachedHero) PolarisGame.ARTWORK_KIND_HERO else PolarisGame.ARTWORK_KIND_POSTER
         NovaLibraryCinematicBackdropTarget(
             game = game,

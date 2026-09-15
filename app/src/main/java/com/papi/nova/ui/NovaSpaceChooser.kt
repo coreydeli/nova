@@ -41,25 +41,38 @@ internal fun NovaSpaceChooser(snapshot: PolarisSpaces, busy: Boolean, error: Str
         input.requestInputMode(InputMode.Keyboard)
         runCatching { (if (busy || !snapshot.canSwitch) backFocus else focus).requestFocus() }
     }
-    Column(Modifier.fillMaxSize().background(colors.window).windowInsetsPadding(WindowInsets.safeDrawing)
+    Box(Modifier.fillMaxSize().background(colors.window).windowInsetsPadding(WindowInsets.safeDrawing),
+        contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()
         .verticalScroll(rememberScrollState()).padding(24.dp).testTag("nova-space-chooser"),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Choose Space", color = colors.textPrimary, fontSize = 28.sp)
-        Text("Each Space keeps its own games, saves, and sign-ins. Choosing one does not open a stream.",
+        Text("Choose Where To Play", color = colors.textPrimary, fontSize = 28.sp)
+        Text("Choose your Space to browse its games and saves. Each Space keeps its own Steam sign-in.",
             color = colors.textSecondary, fontSize = 16.sp)
         if (!snapshot.canSwitch) Text("End your stream before switching Spaces.", color = colors.textPrimary)
         error?.let { Text(it, color = colors.textPrimary) }
+        if (snapshot.desktopAllowed) {
+            NovaActionButton(text = "Desktop", onClick = { onChoose("desktop") },
+                selected = snapshot.selectedId == "desktop", enabled = !busy && snapshot.canSwitch, minHeight = 52.dp,
+                modifier = (if (snapshot.selectedId == "desktop") Modifier.focusRequester(focus) else Modifier).fillMaxWidth()
+                    .testTag("nova-space-choice-desktop"))
+            Text("Your computer’s usual games and desktop.", color = colors.textSecondary, fontSize = 14.sp)
+        }
         snapshot.spaces.forEach { space ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                NovaSpaceAvatar(space.name)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 NovaActionButton(text = space.name, onClick = { onChoose(space.id) }, selected = space.selected,
                     enabled = !busy && snapshot.canSwitch, minHeight = 52.dp,
-                    modifier = (if (space.selected) Modifier.focusRequester(focus) else Modifier)
+                    modifier = (if (space.selected) Modifier.focusRequester(focus) else Modifier).fillMaxWidth()
                         .testTag("nova-space-choice-${space.id}"))
                 Text(listOfNotNull(if (space.selected) "Current Space" else null, spaceStateLabel(space.state)).joinToString(" · "),
                     color = colors.textSecondary, fontSize = 14.sp)
             }
         }
+        }
         NovaActionButton(text = "Back", onClick = onBack, minHeight = 52.dp,
             modifier = Modifier.focusRequester(backFocus).testTag("nova-space-chooser-back"))
+    }
     }
 }

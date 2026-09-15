@@ -112,6 +112,7 @@ class ComputerDetails {
     @JvmField var nvidiaServer: Boolean = false
     @JvmField var serverMaxLaunchRefreshRate: Int = 0
     @JvmField var libraryState: LibraryState = LibraryState.UNKNOWN
+    @JvmField var spacesAvailable: Boolean = false
 
     // VDisplay info
     @JvmField var vDisplaySupported: Boolean = false
@@ -221,6 +222,7 @@ class ComputerDetails {
         rawAppList = details.rawAppList
         appListLoadError = details.appListLoadError
         serverMaxLaunchRefreshRate = details.serverMaxLaunchRefreshRate
+        spacesAvailable = details.spacesAvailable
         if (details.libraryState != LibraryState.UNKNOWN ||
             state != State.ONLINE ||
             pairState != PairingManager.PairState.PAIRED

@@ -634,16 +634,16 @@ object NovaLibraryUiStateMapper {
         eyebrow: String,
         caption: String
     ): NovaLibraryHeroState {
-        val isSpace = com.papi.nova.manager.WorkerLaunchContract.isProfileApp(game.id)
+        val isSpace = com.papi.nova.manager.WorkerLaunchContract.isLegacyProfileApp(game.id)
         val badges = buildList {
-            if (isSpace) add("Space")
+            if (isSpace || game.space != null) add("Space")
             if (game.lastLaunched > 0) add("Recent")
             if (game.hdrSupported) add("HDR")
             if (game.categoryLabel.isNotBlank()) add(game.categoryLabel)
             if (game.sourceLabel.isNotBlank()) add(game.sourceLabel)
             if (game.runtimeLabel.isNotBlank()) add(game.runtimeLabel)
         }.distinct()
-        val subtitle = if (isSpace) "Gaming Space" else game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
+        val subtitle = game.space?.let { "In ${it.name}" } ?: if (isSpace) "Gaming Space" else game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
         val actionContext = when (reason) {
             NovaLibraryHeroReason.LAST_PLAYED -> "Continue"
             NovaLibraryHeroReason.FIRST_FILTERED -> if (eyebrow == "Filtered library") "Filtered" else "Ready"

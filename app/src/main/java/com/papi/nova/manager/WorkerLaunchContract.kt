@@ -11,9 +11,21 @@ object WorkerLaunchContract {
     // the host's UUID generator also emits uppercase identifiers.
     private val profileId = Regex("[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}")
 
-    data class Contract(val id: String, val width: Int, val height: Int, val fps: Int, val bitrateKbps: Int)
+    data class Contract(val id: String, val width: Int, val height: Int, val fps: Int, val bitrateKbps: Int,
+        val target: String = "", val gameIdentity: String = "")
 
-    fun isProfileApp(identity: String?) = identity == APP_UUID || identity == APP_ID.toString()
+    fun validTarget(target: String): Boolean = target == "big-picture-v1" ||
+        (Regex("[1-9][0-9]{0,9}").matches(target) && (target.toLongOrNull() ?: Long.MAX_VALUE) <= 4294967295L)
+
+    fun libraryIdentity(identity: String?): Pair<String, String>? {
+        val parts = identity?.split('.') ?: return null
+        if (parts.size != 3 || parts[0] != "space" || !profileId.matches(parts[1]) || !validTarget(parts[2])) return null
+        return parts[1] to parts[2]
+    }
+
+    fun isLegacyProfileApp(identity: String?) = identity == APP_UUID || identity == APP_ID.toString()
+
+    fun isProfileApp(identity: String?) = isLegacyProfileApp(identity) || libraryIdentity(identity) != null
 
     fun parse(payload: JSONObject?): Contract? {
         payload ?: return null
@@ -41,7 +53,11 @@ object WorkerLaunchContract {
             field("hdr") != false || field("preferred_codec") != "h264" ||
             field("display_mode") != "${width}x${height}x${fps}" ||
             payload.optJSONObject("topology_resolution")?.opt("resolved") != "gamescope_stream") return null
-        return Contract(id, width, height, fps, bitrate)
+        val target = worker.optString("target", "")
+        val gameIdentity = worker.optString("game_identity", "")
+        if (target.isNotEmpty() && libraryIdentity(gameIdentity) != (id to target)) return null
+        if (target.isEmpty() && gameIdentity.isNotEmpty() && !isLegacyProfileApp(gameIdentity)) return null
+        return Contract(id, width, height, fps, bitrate, target, gameIdentity)
     }
 
     fun honors(
@@ -51,7 +67,10 @@ object WorkerLaunchContract {
         forcePrivate: Boolean, encoderBackend: String,
     ): Boolean {
         val contract = parse(payload) ?: return false
-        return isProfileApp(appIdentity) && !mirrorDesktop && !forcePrivate &&
+        return isProfileApp(appIdentity) &&
+            (if (libraryIdentity(appIdentity) != null) contract.gameIdentity == appIdentity &&
+                libraryIdentity(appIdentity) == (contract.id to contract.target) else contract.target.isEmpty()) &&
+            !mirrorDesktop && !forcePrivate &&
             (encoderBackend.isBlank() || encoderBackend == "auto") &&
             requestedFps.isFinite() && requestedFps > 0 &&
             contract.fps <= requestedFps + .5f &&

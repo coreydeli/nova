@@ -1610,7 +1610,8 @@ displayHeight
 .setExpectedTopology(expectedLaunchTopology)
 .setForcePrivateAfterSteamClose(workerLaunch == null && forcePrivateAfterSteamClose)
 .setResolutionScaleFactor(if (workerLaunch == null) prefConfig!!.resolutionScaleFactor else 100)
-.setApp(app)
+.setApp(if (workerLaunch != null) NvApp(appName ?: "Space",
+com.papi.nova.manager.WorkerLaunchContract.APP_UUID, com.papi.nova.manager.WorkerLaunchContract.APP_ID, false) else app)
 .setEnableUltraLowLatency(prefConfig!!.enableUltraLowLatency)
 .setForceFreshLaunch(forceFreshLaunch)
 .setResumeExistingOnly(resumeExistingRequested)
@@ -1619,6 +1620,7 @@ displayHeight
 .setProfilePreference(launchProfilePreference)
 .setResolvedProfile(launchResolvedProfileTrusted)
 .setWorkerProfileId(workerLaunch?.id.orEmpty())
+.setWorkerTarget(workerLaunch?.target.orEmpty())
 .enableLocalAudioPlayback(prefConfig!!.playHostAudio)
 .setMaxPacketSize(1392)
 .setRemoteConfiguration(StreamConfiguration.STREAM_CFG_AUTO) // NvConnection will perform LAN and VPN detection

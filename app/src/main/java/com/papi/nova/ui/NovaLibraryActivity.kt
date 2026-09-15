@@ -458,13 +458,14 @@ class NovaLibraryActivity : NovaActivity() {
         spaceOpenPending = false
     }
 
-    private fun startSpacesPolling() {
+    private fun startSpacesPolling(delayFirst: Boolean = false) {
         spacesPoll?.cancel()
         if (choosingSpace || spaceOpenPending || !::apiClient.isInitialized) return
         val epoch = ++spacesEpoch
         spacesPoll = lifecycleScope.launch {
+            if (delayFirst) delay(5000)
             while (isActive) {
-                if (NovaSpaceUiState.singleSpace(allGames) != null) refreshSpaces(epoch)
+                refreshSpaces(epoch)
                 delay(5000)
             }
         }
@@ -474,7 +475,12 @@ class NovaLibraryActivity : NovaActivity() {
         return try {
             val next = withContext(Dispatchers.IO) { apiClient.getSpaces() }
             if (epoch != spacesEpoch) false else {
-                spacesSnapshot = next; spacesChecked = true; spacesError = null; true
+                val previous = spacesSnapshot?.selectedId
+                spacesSnapshot = next; spacesChecked = true; spacesError = null
+                if (previous != null && previous != next?.selectedId) {
+                    allGames = emptyList(); clearFilters(); loadGames(forceRefresh = true)
+                }
+                true
             }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
@@ -486,12 +492,13 @@ class NovaLibraryActivity : NovaActivity() {
     private fun showSpaceChooser() {
         cancelPendingSpaceOpen()
         chooseSpaceVisible = true
-        startSpacesPolling()
+        startSpacesPolling(delayFirst = true)
     }
 
     private fun chooseSpace(id: String) {
         val snapshot = spacesSnapshot ?: return
-        if (choosingSpace || !spacesChecked || !snapshot.canSwitch || snapshot.spaces.none { it.id == id }) return
+        if (choosingSpace || !spacesChecked || !snapshot.canSwitch ||
+            (snapshot.spaces.none { it.id == id } && !(id == "desktop" && snapshot.desktopAllowed))) return
         if (id == snapshot.selectedId) { chooseSpaceVisible = false; spaceFocusEpoch++; return }
         choosingSpace = true; spacesEpoch++; spacesPoll?.cancel()
         lifecycleScope.launch {
@@ -499,6 +506,9 @@ class NovaLibraryActivity : NovaActivity() {
                 val next = withContext(Dispatchers.IO) { apiClient.selectSpace(id, snapshot.selectedId) }
                 spacesSnapshot = next; spacesChecked = true; spacesError = null
                 launchErrorMessage = null; activeSession = null; chooseSpaceVisible = false; spaceFocusEpoch++
+                allGames = emptyList()
+                clearFilters()
+                loadGames(forceRefresh = true)
                 refreshActiveSession(scheduleFollowUps = true)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
@@ -926,7 +936,7 @@ class NovaLibraryActivity : NovaActivity() {
         gameDetailLauncher.launch(
             NovaGameDetailActivity.newIntent(
                 context = this,
-                game = if (NovaSpaceUiState.isSpace(game)) spacesSnapshot?.selected?.let { game.copy(name = it.name) } ?: game else game,
+                game = if (com.papi.nova.manager.WorkerLaunchContract.isLegacyProfileApp(game.id)) spacesSnapshot?.selected?.let { game.copy(name = it.name) } ?: game else game,
                 host = streamHost,
                 httpsPort = streamHttpsPort,
                 serverCert = streamServerCert,
@@ -1477,18 +1487,24 @@ class NovaLibraryActivity : NovaActivity() {
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(NovaLibraryUiStateMapper.screenPaddingDp(isLandscape).dp)
             ) {
+                val environments = spacesSnapshot?.takeIf { it.spaces.isNotEmpty() }
+                if (environments != null && !chooseSpaceVisible && space == null) {
+                    NovaEnvironmentBar(environments, !choosingSpace && spacesChecked,
+                        onChoose = ::showSpaceChooser, modifier = Modifier.align(Alignment.TopStart))
+                }
                 Box(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().padding(top =
+                        if (environments != null && !chooseSpaceVisible && space == null) 60.dp else 0.dp)
                 ) {
-                    if (space != null) {
-                        if (chooseSpaceVisible && spacesSnapshot != null) {
-                            NovaSpaceChooser(spacesSnapshot!!, choosingSpace || !spacesChecked, spacesError,
-                                onChoose = ::chooseSpace, onBack = { chooseSpaceVisible = false; spaceFocusEpoch++ })
-                        } else NovaSpaceContent(
+                    if (chooseSpaceVisible && spacesSnapshot != null) {
+                        NovaSpaceChooser(spacesSnapshot!!, choosingSpace || !spacesChecked, spacesError,
+                            onChoose = ::chooseSpace, onBack = { chooseSpaceVisible = false; spaceFocusEpoch++ })
+                    } else if (space != null) {
+                        NovaSpaceContent(
                             game = space,
                             displayName = spacesSnapshot?.selected?.name,
                             spaceState = spacesSnapshot?.selected?.state,
-                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1) (::showSpaceChooser) else null,
+                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1 || spacesSnapshot?.desktopAllowed == true) (::showSpaceChooser) else null,
                             hostName = serverName.orEmpty().ifBlank { serverHost },
                             activeSession = activeSession,
                             onOpen = { openSpace(space) },

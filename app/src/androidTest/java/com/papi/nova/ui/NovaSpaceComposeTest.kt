@@ -3,6 +3,7 @@ package com.papi.nova.ui
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -164,4 +165,43 @@ class NovaSpaceComposeTest {
         compose.runOnIdle { ready.value = true }
         awaitFocus("nova-space-primary")
     }
+    @Test fun namedPlayersAndDesktopAreDistinctControllerChoices() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "desktop", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "Alex’s Space", "ready", false, true),
+            com.papi.nova.api.PolarisSpace("sam", "Sam’s Space", "ready", false, true)), desktopAllowed = true)
+        var choice = ""
+        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, { choice = it }, {}) } }
+        awaitFocus("nova-space-choice-desktop")
+        compose.onNodeWithText("Choose Where To Play").assertIsDisplayed()
+        compose.onNodeWithTag("nova-space-choice-desktop").performKeyInput { pressKey(Key.DirectionDown) }
+        awaitFocus("nova-space-choice-alex")
+        compose.onNodeWithTag("nova-space-choice-alex").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals("alex", choice) }
+        saveScreenshot("choose-player.png")
+    }
+
+    @Test fun libraryKeepsPlayerVisibleAndLongNamesKeepChooserReachable() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "alex", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "Alex’s Family Gaming Space", "ready", true, true)))
+        var choices = 0
+        compose.setContent { NovaComposeTheme {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {
+                NovaEnvironmentBar(snapshot, true, { choices++ }, modifier = Modifier.requiredSize(560.dp, 70.dp))
+            }
+        } }
+        compose.onNodeWithText("Playing In").assertIsDisplayed()
+        compose.onNodeWithTag("nova-environment-choose").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, choices) }
+        saveScreenshot("playing-in.png")
+    }
+
+    private fun saveScreenshot(name: String) {
+        val image = compose.onRoot().captureToImage()
+        val bitmap = image.asAndroidBitmap()
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        java.io.File(context.getExternalFilesDir(null), name).outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
 }

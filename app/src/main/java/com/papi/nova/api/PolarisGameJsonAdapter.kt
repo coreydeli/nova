@@ -7,6 +7,8 @@ import org.json.JSONObject
 object PolarisGameJsonAdapter {
     @JvmStatic
     fun fromJson(json: JSONObject): PolarisGame {
+        if (com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(json.optString("id")) != null && json.optJSONObject("space") == null)
+            throw IllegalArgumentException("Missing Space game context")
         val source = json.optString("source", "other")
         val launchMode = json.optJSONObject("launch_mode")?.let { modeJson ->
             PolarisGame.LaunchModeContract(
@@ -65,7 +67,16 @@ object PolarisGameJsonAdapter {
             launchMode = launchMode,
             steamLaunch = steamLaunch,
             displayPlanner = parseDisplayPlanner(json.optJSONObject("display_planner")),
-            artwork = parseArtworkManifest(json.optJSONObject("artwork"))
+            artwork = parseArtworkManifest(json.optJSONObject("artwork")),
+            space = json.optJSONObject("space")?.let { context ->
+                val identity = com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(json.optString("id"))
+                val id = context.optString("id")
+                val target = context.optString("target")
+                val name = context.optString("name")
+                if (identity == null || identity.first != id || identity.second != target || name.isBlank() || name.toByteArray(Charsets.UTF_8).size > 128 || name.any { it.code < 32 || it.code == 127 })
+                    throw IllegalArgumentException("Invalid Space game identity")
+                PolarisGame.SpaceContext(id, name, target)
+            }
         )
     }
 

@@ -39,8 +39,12 @@ data class PolarisGame(
      */
     @SerialName("play_time") val playTime: PlayTime? = null,
     /** Completion estimates, or null when the host's dataset has nothing for this game. */
-    @SerialName("beat_time") val beatTime: BeatTime? = null
+    @SerialName("beat_time") val beatTime: BeatTime? = null,
+    @SerialName("space") val space: SpaceContext? = null
 ) {
+    @Serializable
+    data class SpaceContext(val id: String, val name: String, val target: String)
+
     @Serializable
     data class ArtworkManifest(
         @SerialName("version") val version: Int = 1,
