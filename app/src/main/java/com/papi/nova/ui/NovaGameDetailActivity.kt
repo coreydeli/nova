@@ -1137,6 +1137,17 @@ class NovaGameDetailActivity : NovaActivity() {
             settleThen { loadOptimization(profilePreference) }
         }
 
+        fun chooseFaceButtonLayout(layout: String?) {
+            val normalized = NovaFaceButtonLayoutOverrides.normalize(layout)
+            if (layout != null && normalized == null) return
+            if (normalized == null) {
+                NovaFaceButtonLayoutOverrides.clear(this@NovaGameDetailActivity, currentGame)
+            } else {
+                NovaFaceButtonLayoutOverrides.save(this@NovaGameDetailActivity, currentGame, normalized)
+            }
+            settleThen { loadOptimization(profilePreference) }
+        }
+
         fun selectProfilePreference(value: String) {
             if (value == profilePreference) return
             profilePreference = value
@@ -1439,6 +1450,51 @@ class NovaGameDetailActivity : NovaActivity() {
                         }
                     },
                     overridden = selectedEncoder.isNotBlank(),
+                )
+            }
+
+            run {
+                val selectedLayout = NovaFaceButtonLayoutOverrides.load(this@NovaGameDetailActivity, currentGame)
+                val switchGame = currentGame.platform.equals("switch", ignoreCase = true)
+                rows += NovaPlaySetupRowState(
+                    row = NovaPlaySetupRow.FACE_BUTTONS,
+                    label = getString(R.string.nova_play_setup_face_buttons),
+                    caption = when (selectedLayout) {
+                        NovaFaceButtonLayoutOverrides.POSITIONS -> getString(R.string.nova_play_setup_face_buttons_positions_caption)
+                        NovaFaceButtonLayoutOverrides.LABELS -> getString(R.string.nova_play_setup_face_buttons_labels_caption)
+                        else -> if (switchGame) {
+                            getString(R.string.nova_play_setup_face_buttons_switch_hint)
+                        } else {
+                            getString(R.string.nova_play_setup_face_buttons_app_setting_caption)
+                        }
+                    },
+                    value = when (selectedLayout) {
+                        NovaFaceButtonLayoutOverrides.POSITIONS -> getString(R.string.nova_play_setup_face_buttons_positions)
+                        NovaFaceButtonLayoutOverrides.LABELS -> getString(R.string.nova_play_setup_face_buttons_labels)
+                        else -> getString(R.string.nova_play_setup_face_buttons_app_setting)
+                    },
+                    stripTitle = getString(R.string.nova_play_setup_strip_face_buttons),
+                    options = listOf(
+                        NovaPlaySetupOption(
+                            label = getString(R.string.nova_play_setup_face_buttons_app_setting),
+                            consequence = getString(R.string.nova_play_setup_face_buttons_app_setting_consequence),
+                            current = selectedLayout == null,
+                            onSelect = { chooseFaceButtonLayout(null) },
+                        ),
+                        NovaPlaySetupOption(
+                            label = getString(R.string.nova_play_setup_face_buttons_labels),
+                            consequence = getString(R.string.nova_play_setup_face_buttons_labels_consequence),
+                            current = selectedLayout == NovaFaceButtonLayoutOverrides.LABELS,
+                            onSelect = { chooseFaceButtonLayout(NovaFaceButtonLayoutOverrides.LABELS) },
+                        ),
+                        NovaPlaySetupOption(
+                            label = getString(R.string.nova_play_setup_face_buttons_positions),
+                            consequence = getString(R.string.nova_play_setup_face_buttons_positions_consequence),
+                            current = selectedLayout == NovaFaceButtonLayoutOverrides.POSITIONS,
+                            onSelect = { chooseFaceButtonLayout(NovaFaceButtonLayoutOverrides.POSITIONS) },
+                        ),
+                    ),
+                    overridden = selectedLayout != null,
                 )
             }
 

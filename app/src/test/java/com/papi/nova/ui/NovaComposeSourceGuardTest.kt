@@ -3389,4 +3389,16 @@ class NovaComposeSourceGuardTest {
         assertTrue("the legacy grid must prefer the host's platform label", legacyApp.contains("platformLabelFromServer.ifBlank"))
         assertTrue("the legacy grid must prefer the host's runtime label", legacyApp.contains("runtimeLabelFromServer.ifBlank"))
     }
+
+    @Test
+    fun perGameFaceButtonLayoutReachesTheLaunchBeforeThePadsAreBuilt() {
+        val game = readSource("src/main/java/com/papi/nova/Game.kt")
+        val applied = game.indexOf("NovaFaceButtonLayoutOverrides.flipFaceButtons(")
+        val handler = game.indexOf("controllerHandler = ControllerHandler(")
+        assertTrue("Game must apply the per-game face button layout", applied >= 0)
+        assertTrue("Game must build ControllerHandler after applying the layout", handler > applied)
+        assertTrue(readSource("src/main/java/com/papi/nova/utils/ServerHelper.kt").contains("Game.EXTRA_FACE_BUTTON_LAYOUT"))
+        assertTrue(readSource("src/main/java/com/papi/nova/ui/NovaGameDetailActivity.kt").contains("row = NovaPlaySetupRow.FACE_BUTTONS,"))
+        assertTrue(readSource("src/main/java/com/papi/nova/ShortcutTrampoline.kt").contains("faceButtonLayout = readyLaunchPlan.faceButtonLayout"))
+    }
 }

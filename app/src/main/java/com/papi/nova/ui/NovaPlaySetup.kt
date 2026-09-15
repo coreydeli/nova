@@ -410,6 +410,7 @@ internal enum class NovaPlaySetupRow {
     RESOLUTION,
     FRAME_RATE,
     ENCODER,
+    FACE_BUTTONS,
     TUNING,
     STEAM_LAUNCH,
     HOST_DEFAULT_DISPLAY,
