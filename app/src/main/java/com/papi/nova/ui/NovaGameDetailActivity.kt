@@ -1496,6 +1496,7 @@ class NovaGameDetailActivity : NovaActivity() {
                     launchOptimization(),
                     clientAskedFps = (effectiveFpsPin(chosenFps, profilePreference, launchPreferences.fps)
                         ?: launchPreferences.fps.toInt()).toDouble(),
+                    clientAskedHdr = launchPreferences.enableHdr,
                 )
                 if (spaceGame != null) {
                     val constraint = spaceConstraint()
@@ -2414,6 +2415,7 @@ class NovaGameDetailActivity : NovaActivity() {
                 opt,
                 clientAskedFps = clientPreferences.fps.toDouble(),
                 clientFpsPinned = NovaLaunchStreamOverride.highFpsPin(profilePreference, clientPreferences.fps) != null,
+                clientAskedHdr = clientPreferences.enableHdr,
             ),
             rawOptimization = opt,
             reviewRequired = StreamSyncManager.requiresLaunchPreflightReview(opt),
@@ -2550,7 +2552,7 @@ internal fun resolveSavedResolutionChoice(
  * what this panel can actually present: see [NovaDisplayFpsCapability.allowedFpsValues],
  * the same threshold every other FPS-offering surface in the app uses.
  */
-private val NOVA_FRAME_RATE_CHOICES = listOf(30, 60, 90, 120)
+private val NOVA_FRAME_RATE_CHOICES: List<Int> = NovaDisplayFpsCapability.STANDARD_FPS_VALUES
 
 /**
  * The fps that actually launches: an explicit Frame Rate row pin, or -- only when there

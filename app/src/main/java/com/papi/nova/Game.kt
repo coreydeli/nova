@@ -5405,6 +5405,12 @@ NovaSnackbar.showError(this@Game, getString(R.string.video_decoder_init_failed))
 }
 
 var dialogText:String = getResources().getString(R.string.conn_error_msg) + " " + stage + " (error " + errorCode + ")"
+ // A Polaris host says why it refused; that beats "error 503" and a generic sentence.
+val hostRefusal = conn?.lastHostRefusal
+if (hostRefusal != null && errorCode != 0)
+{
+dialogText = hostRefusal.describe()
+}
 
 when (errorCode) {
 403 -> {

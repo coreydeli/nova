@@ -150,12 +150,18 @@
         <item>@string/fps_60</item>
         <item>@string/fps_90</item>
         <item>@string/fps_120</item>
+        <item>@string/fps_144</item>
+        <item>@string/fps_165</item>
+        <item>@string/fps_240</item>
     </string-array>
     <string-array name="fps_values" translatable="false">
         <item>30</item>
         <item>60</item>
         <item>90</item>
         <item>120</item>
+        <item>144</item>
+        <item>165</item>
+        <item>240</item>
     </string-array>
 
     <string-array name="video_scale_mode_names">
