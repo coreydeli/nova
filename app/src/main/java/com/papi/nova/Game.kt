@@ -777,6 +777,13 @@ UiHelper.setLocale(this)
 
  // Read the stream preferences
         prefConfig = PreferenceConfiguration.readPreferences(this)
+        // A per-game face-button choice from Play Setup outranks the Settings flip for this
+        // launch. ControllerHandler and the on-screen pad read prefConfig later, so one
+        // assignment here covers physical and virtual pads alike.
+        prefConfig.flipFaceButtons = com.papi.nova.ui.NovaFaceButtonLayoutOverrides.flipFaceButtons(
+            getIntent().getStringExtra(EXTRA_FACE_BUTTON_LAYOUT),
+            prefConfig.flipFaceButtons,
+        )
 tombstonePrefs = this@Game.getSharedPreferences("DecoderTombstone", 0)
 
 if (isDisconnectIntent(getIntent()))
@@ -7344,6 +7351,7 @@ companion object {
  const val EXTRA_VDISPLAY:String = "VirtualDisplay"
  const val EXTRA_STREAM_MODE:String = "StreamMode"
  const val EXTRA_ENCODER_BACKEND:String = "EncoderBackend"
+ const val EXTRA_FACE_BUTTON_LAYOUT:String = "FaceButtonLayout"
  const val EXTRA_DISPLAY_MODE_EXPLICIT:String = "DisplayModeExplicit"
  const val EXTRA_MIRROR_DESKTOP:String = "MirrorDesktop"
 const val EXTRA_FORCE_PRIVATE_AFTER_STEAM_CLOSE:String = "ForcePrivateAfterSteamClose"

@@ -1138,6 +1138,7 @@ class NovaLibraryActivity : NovaActivity() {
                     forcePrivateAfterSteamClose = forcePrivateAfterSteamClose,
                     streamMode = launchMode,
                     encoderBackend = encoderBackend,
+                    faceButtonLayout = NovaFaceButtonLayoutOverrides.load(this@NovaLibraryActivity, game).orEmpty(),
                 )
             } catch (e: CancellationException) {
                 throw e
