@@ -27,6 +27,8 @@ by this device. A matching session owned by another device is **In Use**. An
 unrelated game on the host does not become this Space's Resume action. Opening
 an available Space is still subject to the host's current capacity and access.
 
+![Your Space on Nova](images/spaces/your-space.png)
+
 ## Choose Another Space
 
 1. In Polaris, choose a device's **Default Space**.
@@ -45,6 +47,8 @@ before opening. **Starting** and **Stopping** keep Open Space unavailable until 
 host finishes. If status cannot be verified, check the connection and try again.
 Older hosts without the chooser API retain their existing single-Space flow.
 
+![Choose between permitted Spaces](images/spaces/choose-space.png)
+
 ## Change Stream Settings
 
 Select **Stream Settings** beside Open Space. The host's available choices include
@@ -53,9 +57,11 @@ saved on this Android device and applied on the next Space launch. Settings
 currently follow the device's assigned Space; they are not separate saved presets
 for each Steam account.
 
-For 120 FPS, select **Frame Rate**, then **120 FPS** when offered. The display must
-support it, and the host must accept the requested stream. Choosing 120 FPS is not
-a guarantee that the game itself will render 120 frames per second.
+Select **Frame Rate**, then the desired rate when offered. Nova offers up to
+**240 FPS** on supported displays; a 120 Hz handheld offers rates through
+**120 FPS**. The host must also accept the requested stream. A selected rate is a
+target, and does not establish sustained game rendering or actual presentation.
+Check gameplay, audio and frame pacing with all intended Spaces running.
 
 If Polaris offers a different resolution or frame rate from your explicit choice,
 Nova shows the host settings and waits before opening the Space. Choose **Auto**
@@ -67,6 +73,8 @@ preferences remain available through **System**, then Nova's streaming settings.
 
 Spaces currently use the host runtime's fixed codec and quality contract. Nova's
 general Streaming Presets remain separate from Space selection.
+
+![Resolution and frame rate settings for a Space](images/spaces/stream-settings.png)
 
 ## Use A Controller
 
