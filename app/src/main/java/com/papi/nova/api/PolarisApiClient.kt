@@ -2854,6 +2854,15 @@ class PolarisApiClient @JvmOverloads constructor(
         resolveArtworkBitmap(buildArtworkLoadSpec(game, PolarisGame.ARTWORK_KIND_ICON))
 
     fun loadArtworkInto(view: ImageView, game: PolarisGame, kind: String) {
+        val space = game.space
+        if (kind.trim().lowercase() == PolarisGame.ARTWORK_KIND_POSTER && space?.target == "big-picture-v1" &&
+            com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(game.id) == (space.id to space.target)) {
+            view.setTag(R.id.nova_artwork_request_key, "bundled-steam:${game.id}")
+            (view.getTag(R.id.nova_artwork_job) as? Job)?.cancel()
+            view.setTag(R.id.nova_artwork_job, null)
+            view.setImageResource(R.drawable.nova_steam_big_picture)
+            return
+        }
         val spec = buildArtworkLoadSpec(game, kind)
 
         view.setTag(R.id.nova_artwork_request_key, spec.cacheKey)

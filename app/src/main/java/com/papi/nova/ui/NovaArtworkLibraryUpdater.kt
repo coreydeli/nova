@@ -69,7 +69,7 @@ class NovaArtworkLibraryUpdater(
     ): Summary = coroutineScope {
         val uniqueGames = games.distinctBy { it.id }
         val customGames = uniqueGames.filter { it.artwork?.override?.active == true }
-        // Open Steam uses Nova's bundled launcher artwork, with no provider game ID.
+        // Steam Big Picture uses bundled launcher artwork, with no provider game ID.
         val bundledGames = uniqueGames.filter { game ->
             val space = game.space
             game.artwork?.override?.active != true && space?.target == "big-picture-v1" &&

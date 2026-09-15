@@ -7,7 +7,8 @@ import org.json.JSONObject
 object PolarisGameJsonAdapter {
     @JvmStatic
     fun fromJson(json: JSONObject): PolarisGame {
-        if (com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(json.optString("id")) != null && json.optJSONObject("space") == null)
+        val spaceIdentity = com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(json.optString("id"))
+        if (spaceIdentity != null && json.optJSONObject("space") == null)
             throw IllegalArgumentException("Missing Space game context")
         val source = json.optString("source", "other")
         val launchMode = json.optJSONObject("launch_mode")?.let { modeJson ->
@@ -31,7 +32,7 @@ object PolarisGameJsonAdapter {
         return PolarisGame(
             id = json.optString("id", ""),
             appId = json.optString("app_id", "").toIntOrNull() ?: json.optInt("app_id", 0),
-            name = json.optString("name", ""),
+            name = if (spaceIdentity?.second == "big-picture-v1") "Steam Big Picture" else json.optString("name", ""),
             source = source,
             launcherSource = json.optString("launcher_source", source),
             launcherDetail = json.optString("launcher_detail", ""),
