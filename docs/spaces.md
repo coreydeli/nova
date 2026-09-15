@@ -12,30 +12,34 @@ Docker on your Android device.
 
 1. Pair Nova with your Polaris host if it is not already paired.
 2. In Polaris, assign a Space to that device under **Spaces**, then **Default Space**.
-3. Open the host in Nova. When it exposes one assigned Space, Library shows
-   **Your Space**, its name, and the host name.
-4. Select **Open Space**. Nova checks the host and uses your saved stream settings.
-   The current Steam Space opens Steam Big Picture. Sign in there the first time.
-5. Choose your game inside Steam.
+3. Open the host in Nova. **Playing In** identifies the selected Space in the
+   library toolbar, beside **Change Space**, **Options**, and **System**.
+4. Choose **Steam Big Picture**, then **Open Steam Big Picture**. Sign into Steam
+   and install a game the first time you use this Space.
+5. Return to Nova and refresh the library. Select the installed game's poster,
+   then **Play**. The library banner follows the focused game.
 
-The Open Space action does not require a stop at ordinary game details. A required
-host check, connection error, or settings review stays visible before launching.
-The host still decides whether the device is allowed to start the Space.
+A Space name identifies your gaming environment; it does not confirm which
+Steam account is signed in. Check or switch that account inside Steam Big Picture.
+Nova checks access and saved stream settings before launching. Required host
+checks, connection errors and settings reviews stay visible before launch.
 
-Nova offers **Resume Space** only when the host reports a matching session owned
-by this device. A matching session owned by another device is **In Use**. An
-unrelated game on the host does not become this Space's Resume action. Opening
-an available Space is still subject to the host's current capacity and access.
+Nova offers **Resume** only for the matching game and Space session owned by this
+device. **In Use** means another device is using that Space. Availability remains
+subject to the host's current capacity and access rules.
 
-![Your Space on Nova](images/spaces/your-space.png)
+Older hosts that expose one Space without a game library retain the direct
+**Your Space → Open Space** screen. This opens that host's configured launcher;
+the current Steam runtime uses Steam Big Picture.
 
 ## Choose Another Space
 
 1. In Polaris, choose a device's **Default Space**.
 2. On any additional Space card, expand **Device Access** and allow that device.
    Wait for confirmation. Changing access requires all Space streams to be stopped.
-3. Open the host in Nova and select **Choose Space**. Only your permitted Spaces appear.
-4. Pick a Space, then select **Open Space** when it is **Ready To Play**.
+3. Open the host in Nova and select **Change Space**. Only your permitted Spaces appear.
+4. Pick a Space to browse its games. Select a game or Steam Big Picture when it
+   is **Ready To Play**.
 
 Choosing a Space does not launch it. Polaris remembers your choice for this device
 across app and host restarts. Your device must finish its current stream and cleanup
@@ -47,12 +51,11 @@ before opening. **Starting** and **Stopping** keep Open Space unavailable until 
 host finishes. If status cannot be verified, check the connection and try again.
 Older hosts without the chooser API retain their existing single-Space flow.
 
-![Choose between permitted Spaces](images/spaces/choose-space.png)
-
 ## Change Stream Settings
 
-Select **Stream Settings** beside Open Space. The host's available choices include
-**Resolution** and **Frame Rate**. These preferences are
+Select a game, then open **Play Setup**. The host's available choices include
+**Resolution** and **Frame Rate**. **Change Space** chooses a permitted environment
+where that title is installed. These stream preferences are
 saved on this Android device and applied on the next Space launch. Settings
 currently follow the device's assigned Space; they are not separate saved presets
 for each Steam account.
@@ -68,35 +71,39 @@ Nova shows the host settings and waits before opening the Space. Choose **Auto**
 for **Frame Rate** and **Device Settings** for **Resolution** to follow the host,
 or update the device’s display settings in Polaris and retry.
 
-Select **Done** to return without launching. Codec, bitrate, and other device-wide
-preferences remain available through **System**, then Nova's streaming settings.
+Return to the library without launching when you have finished adjusting settings.
+On the older direct Space screen, use **Stream Settings**, then **Done**.
+Codec, bitrate, and other device-wide preferences remain available through
+**System**, then Nova's streaming settings.
 
 Spaces currently use the host runtime's fixed codec and quality contract. Nova's
 general Streaming Presets remain separate from Space selection.
 
-![Resolution and frame rate settings for a Space](images/spaces/stream-settings.png)
-
 ## Use A Controller
 
-The primary action receives focus when you enter. Use the D-pad to move, **A** to
-select, and **B** to return. **X** opens Stream Settings from the single-Space
-Library. Returning from settings restores the previous action. Touch controls
-perform the same actions.
+Use the D-pad to move through game posters and the toolbar, **A** to select, and
+**B** to return. The artwork and selected-game banner follow focus. The toolbar
+keeps Space selection and library controls in one row; on narrow screens or with
+enlarged text, controller focus scrolls it to keep each action reachable. Touch
+controls perform the same actions.
+
+On the older single-Space screen, **X** opens Stream Settings. Returning from
+settings restores the previous action.
 
 ## Ordinary Streaming And Shared Hosts
 
 Hosts serving ordinary games retain the existing Library. Nova does not add a
-required Spaces tab or a setup step for ordinary streaming. With one allowed Space, Open Space stays a direct action. With several, Nova adds
-**Choose Space** beside it. No extra Spaces tab is required.
+required Spaces tab or a setup step for ordinary streaming. With one allowed Space,
+its library opens directly. With several, **Change Space** stays in the toolbar.
 
-Removing a Space in Polaris retains its Steam data and installed games. It removes
+**Remove Space** in Polaris retains its Steam data and installed games. It removes
 device access and does not reclaim disk space. Restore it and assign the device
-again before returning to Nova.
+again before returning to Nova. Restorable Spaces are listed under **Archived Spaces**.
 
 ## Check Sound And Stuttering
 
 For a comparison, ask the host owner to offer 1080p at 60 FPS for your device.
-In **Stream Settings**, choose **Auto** for **Frame Rate** and **Device Settings**
+In **Play Setup** (or **Stream Settings** on an older host), choose **Auto** for **Frame Rate** and **Device Settings**
 for **Resolution**. Begin with one Space, then check again with the other
 players connected.
 
@@ -106,7 +113,9 @@ paused too. Low average latency and zero reported video packet loss do not rule
 out brief audio delivery pauses.
 
 Save before reconnecting: the current runtime ends its game session when the
-stream disconnects. It keeps the Space's installed games and saved data.
+stream disconnects. **Leave Space** explains this before you confirm. It keeps
+the Space's installed games, saved data and Steam sign-in. A dropped connection
+can also end the session; Resume does not promise to recover a disconnected game.
 
 When possible, repeat with the same client over Ethernet or another access
 point, keeping the game and stream settings unchanged. Ask the host owner to
