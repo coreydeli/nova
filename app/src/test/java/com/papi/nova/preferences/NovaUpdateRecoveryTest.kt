@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -45,6 +46,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.shadows.ShadowToast
 
@@ -205,12 +207,15 @@ class NovaUpdateRecoveryTest {
     }
 
     @Test
+    @LooperMode(LooperMode.Mode.PAUSED)
     fun cancellationAfterAtomicCommitDeletesFinalArtifact() {
         val cacheDir = freshCacheDir()
         val updateDir = File(cacheDir, "nova-updates")
         val mainLooper = Shadows.shadowOf(Looper.getMainLooper())
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val job = scope.launch {
+        // Start only until the IO suspension. Draining Main here can also deliver
+        // the completed download before cancellation on a fast CI worker.
+        val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             NovaUpdateDownloadStore.download(
                 cacheDir,
                 release,
@@ -218,7 +223,6 @@ class NovaUpdateRecoveryTest {
             )
         }
         try {
-            mainLooper.idle()
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
             var committedFile: File? = null
             while (committedFile == null && System.nanoTime() < deadline) {
@@ -227,13 +231,16 @@ class NovaUpdateRecoveryTest {
             }
             assertTrue("Download never reached the atomic commit boundary", committedFile != null)
 
+            assertFalse("Main must not receive the committed download before cancellation", job.isCompleted)
             job.cancel()
-            while (!job.isCompleted && System.nanoTime() < deadline) {
+            val cancellationDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!job.isCompleted && System.nanoTime() < cancellationDeadline) {
                 mainLooper.idle()
                 Thread.sleep(5L)
             }
             mainLooper.idle()
 
+            assertTrue("Cancellation cleanup did not complete", job.isCompleted)
             assertTrue(job.isCancelled)
             assertDownloadArtifactsAbsent(cacheDir)
         } finally {
