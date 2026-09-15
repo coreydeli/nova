@@ -145,7 +145,7 @@ class NovaSpaceComposeTest {
         compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, {}, {}) } }
         awaitFocus("nova-space-chooser-back")
         compose.onNodeWithTag("nova-space-choice-b").assertIsNotEnabled()
-        compose.onNodeWithText("End your stream before switching Spaces.").assertIsDisplayed()
+        compose.onNodeWithText("Save your game and end your stream before switching Spaces.").assertIsDisplayed()
     }
 
     @Test fun busySpaceKeepsChooserReachableAndCannotOpen() {
@@ -172,7 +172,7 @@ class NovaSpaceComposeTest {
         var choice = ""
         compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, { choice = it }, {}) } }
         awaitFocus("nova-space-choice-desktop")
-        compose.onNodeWithText("Choose Where To Play").assertIsDisplayed()
+        compose.onNodeWithText("Change Space").assertIsDisplayed()
         compose.onNodeWithTag("nova-space-choice-desktop").performKeyInput { pressKey(Key.DirectionDown) }
         awaitFocus("nova-space-choice-alex")
         compose.onNodeWithTag("nova-space-choice-alex").performKeyInput { pressKey(Key.DirectionCenter) }
@@ -182,7 +182,7 @@ class NovaSpaceComposeTest {
 
     @Test fun libraryKeepsPlayerVisibleAndLongNamesKeepChooserReachable() {
         val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "alex", listOf(
-            com.papi.nova.api.PolarisSpace("alex", "Alex’s Family Gaming Space", "ready", true, true)))
+            com.papi.nova.api.PolarisSpace("alex", "Alex’s Family Gaming Space", "ready", true, true)), desktopAllowed = true)
         var choices = 0
         compose.setContent { NovaComposeTheme {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {

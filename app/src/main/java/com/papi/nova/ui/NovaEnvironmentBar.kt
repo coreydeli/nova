@@ -27,11 +27,13 @@ internal fun NovaEnvironmentBar(spaces: PolarisSpaces, enabled: Boolean, onChoos
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         NovaSpaceAvatar(name)
         Text("Playing In", color = colors.textSecondary, fontSize = 14.sp)
-        NovaActionButton(text = "$name ▾", onClick = onChoose, enabled = enabled, minHeight = 48.dp,
-            contentDescription = "Playing In $name. Choose where to play.",
-            modifier = Modifier.weight(1f, fill = false).testTag("nova-environment-choose"))
-        Text(if (spaces.selected == null) "Desktop" else "Space", color = colors.accent, fontSize = 12.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(name, color = colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (spaces.spaces.size + (if (spaces.desktopAllowed) 1 else 0) > 1) {
+            NovaActionButton(text = "Change Space", onClick = onChoose, enabled = enabled, minHeight = 48.dp,
+                contentDescription = "Playing In $name. Change Space.",
+                modifier = Modifier.testTag("nova-environment-choose"))
+        }
     }
 }
 

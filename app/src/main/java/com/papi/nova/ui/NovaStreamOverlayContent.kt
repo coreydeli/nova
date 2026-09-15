@@ -39,7 +39,8 @@ data class NovaSessionProgressUiState(
     val completedStages: List<String>,
     val confidenceLabel: String,
     val confidenceDetail: String,
-    val progressFraction: Float
+    val progressFraction: Float,
+    val indeterminate: Boolean = false,
 ) {
     companion object {
         private data class StageCopy(
@@ -176,6 +177,25 @@ data class NovaSessionProgressUiState(
             )
         )
 
+        /** Space startup follows the observed worker request and native stream handshake.
+         * Do not infer Steam readiness or complete stages from desktop session events. */
+        fun fromSpace(state: String): NovaSessionProgressUiState? {
+            val normalized = state.trim().lowercase()
+            val (title, detail, order) = when (normalized) {
+                "initializing", "conn_establishing" -> Triple("Checking Space", "Connecting to Polaris and checking your selected Space.", .05f)
+                "space_starting" -> Triple("Starting Space", "Polaris is preparing your gaming environment and opening the selected app.", .1f)
+                "space_connecting", "platform initialization", "name resolution", "audio stream initialization", "rtsp handshake" ->
+                    Triple("Connecting Stream", "Connecting this device to your Space.", .2f)
+                "control stream initialization", "control stream establishment" -> Triple("Connecting Controls", "Connecting the control channel to your Space.", .3f)
+                "video stream initialization", "video stream establishment" -> Triple("Connecting Video", "Preparing the picture on this device.", .4f)
+                "audio stream establishment" -> Triple("Connecting Sound", "Connecting your Space’s audio.", .5f)
+                "input stream initialization", "input stream establishment" -> Triple("Connecting Controller", "Preparing controller and keyboard input.", .6f)
+                "input_ready" -> Triple("Waiting For Picture", "Stream channels are connected. Waiting for the first picture.", .7f)
+                else -> return null
+            }
+            return NovaSessionProgressUiState(normalized, title, "Opening Space", emptyList(), title, detail, order, true)
+        }
+
         fun from(state: String, message: String = ""): NovaSessionProgressUiState {
             val normalizedState = state.trim().lowercase().ifBlank { "initializing" }
             val index = stages.indexOfFirst { stage ->
@@ -261,7 +281,11 @@ fun NovaSessionProgressOverlayContent(
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center
         )
-        LinearProgressIndicator(
+        if (state.indeterminate) LinearProgressIndicator(
+            modifier = Modifier.padding(top = 28.dp, bottom = 18.dp).fillMaxWidth().widthIn(max = 520.dp),
+            color = LocalNovaComposeColors.current.accent,
+            trackColor = Color.White.copy(alpha = 0.18f),
+        ) else LinearProgressIndicator(
             progress = { state.progressFraction },
             modifier = Modifier
                 .padding(top = 28.dp, bottom = 18.dp)

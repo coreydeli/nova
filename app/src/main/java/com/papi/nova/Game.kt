@@ -225,6 +225,8 @@ private var novaResilienceManager:com.papi.nova.manager.ConnectionResilienceMana
 private var novaEventSource:com.papi.nova.api.PolarisEventSource? = null
 private var polarisSseSawCurrentSessionEvent = false
 private var novaProgressOverlay:com.papi.nova.ui.SessionProgressOverlay? = null
+private var spaceSession = false
+fun isSpaceSession(): Boolean = spaceSession
 private var novaLockScreenOverlay:com.papi.nova.ui.LockScreenOverlay? = null
 private var novaReconnectOverlay:com.papi.nova.ui.ReconnectOverlay? = null
 private var spinner:SpinnerDialog? = null
@@ -1361,6 +1363,8 @@ finish()
 return
 }
 val workerLaunch = com.papi.nova.manager.WorkerLaunchContract.parse(launchOptimization)
+spaceSession = workerLaunch != null
+novaProgressOverlay?.setSpaceSession(spaceSession)
 val exactMediaCadence = launchResolvedProfileTrusted || workerLaunch != null
 val expectedLaunchTopology = if (launchResolvedProfileTrusted) {
 com.papi.nova.manager.LaunchTopologyEnvelope.resolvedSelection(launchOptimization).orEmpty()
@@ -5470,13 +5474,15 @@ gravity = Gravity.CENTER_HORIZONTAL
 bottomMargin = dp(14)
 })
 val title = TextView(this@Game).apply {
-text = getString(R.string.nova_launch_issue_title)
+text = if (spaceSession) "Space Could Not Start" else getString(R.string.nova_launch_issue_title)
 setTextColor(NovaThemeManager.getTextPrimaryColor(this@Game))
 textSize = 20f
 }
 container.addView(title)
 val body = TextView(this@Game).apply {
-text = message
+text = if (spaceSession) listOfNotNull(conn?.lastHostRefusal?.message,
+    conn?.lastHostRefusal?.action ?: "Return to Library and try again. If this continues, open Spaces in Polaris and check Host Setup.")
+    .joinToString("\n\n") else message
 setTextColor(NovaThemeManager.getTextSecondaryColor(this@Game))
 textSize = 14f
 setPadding(0, dp(10), 0, dp(12))
@@ -5485,8 +5491,22 @@ val scroll = ScrollView(this@Game).apply {
 addView(body)
 }
 container.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+if (spaceSession) {
+val explanation = body.text
+var detailsVisible = false
+val details = Button(this@Game).apply {
+text = "View Details"
+isAllCaps = false
+setOnClickListener {
+detailsVisible = !detailsVisible
+body.text = if (detailsVisible) "$explanation\n\n$message" else explanation
+text = if (detailsVisible) "Hide Details" else "View Details"
+}
+}
+container.addView(details, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+}
 val dismiss = Button(this@Game).apply {
-text = getString(R.string.nova_launch_issue_dismiss)
+text = if (spaceSession) "Back To Library" else getString(R.string.nova_launch_issue_dismiss)
 isAllCaps = false
 setTextColor(NovaThemeManager.getTextPrimaryColor(this@Game))
 background = NovaSheetChrome.createActionBackground(this@Game)
@@ -6378,7 +6398,7 @@ source = com.papi.nova.api.PolarisEventSource(eventsEndpoint,
 object : com.papi.nova.api.PolarisEventSource.EventListener {
 override fun onSessionEvent(event:String, state:String, message:String) = deliverToCurrentSession {
 if (PolarisSessionEvents.isCurrentSessionEvent(event, state)) polarisSseSawCurrentSessionEvent = true
-novaProgressOverlay?.updateState(state, message)
+ novaProgressOverlay?.updateState(state, message)
 if (PolarisSessionEvents.shouldFinishGameActivity(event, state, polarisSseSawCurrentSessionEvent)) {
 handlePolarisHostSessionEnded()
 }
@@ -7033,6 +7053,10 @@ finish()
 }
 
  fun disconnect() {
+if (spaceSession && !hostSessionEnded) {
+quit()
+return
+}
 if (!hostSessionEnded)
 {
 prepareBackgroundResumeWindow()
@@ -7072,14 +7096,15 @@ sheet.window?.attributes?.token = companionPresentation.companionDialogWindowTok
 val container = NovaSheetChrome.createSheetContainer(context)
 
 val title = TextView(context).apply {
-setText(R.string.game_dialog_title_quit_confirm)
+if (spaceSession) text = "Leave Space?" else setText(R.string.game_dialog_title_quit_confirm)
 textSize = 20f
 NovaSheetChrome.styleSheetTitle(this)
 }
 container.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
 val message = TextView(context).apply {
-setText(R.string.game_dialog_message_quit_confirm)
+if (spaceSession) text = "Leaving ends this Space’s game session. Save in your game first. Installed games, saved progress, and your Steam sign-in stay in this Space. Other Spaces keep running."
+else setText(R.string.game_dialog_message_quit_confirm)
 textSize = 15f
 setPadding(0, UiHelper.dpToPx(context, 10f).toInt(), 0, UiHelper.dpToPx(context, 18f).toInt())
 setTextColor(com.papi.nova.ui.NovaThemeManager.getTextSecondaryColor(context))
@@ -7095,7 +7120,7 @@ setOnClickListener { sheet.dismiss() }
 container.addView(stay, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiHelper.dpToPx(context, 48f).toInt()))
 
 val endSession = TextView(context).apply {
-text = getString(R.string.game_dialog_action_end_session)
+text = if (spaceSession) "Leave Space" else getString(R.string.game_dialog_action_end_session)
 gravity = Gravity.CENTER
 NovaSheetChrome.styleSheetAction(this, destructive = true)
 setOnClickListener {

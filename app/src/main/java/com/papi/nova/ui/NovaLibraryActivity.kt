@@ -1338,14 +1338,17 @@ class NovaLibraryActivity : NovaActivity() {
         activeSession: NovaLibraryActiveSessionUiState?,
         optionsState: NovaLibraryOptionsState
     ): NovaLibraryUiModel {
-        return remember(games, searchQuery, filterState, activeSession, optionsState) {
+        val model = remember(games, searchQuery, filterState, activeSession, optionsState) {
             NovaLibraryUiStateMapper.build(
                 games = games,
                 search = searchQuery,
                 filterState = filterState,
                 optionsState = optionsState,
-                activeSession = activeSession
+                activeSession = activeSession,
             )
+        }
+        return remember(model, lastFocusedGameId) {
+            NovaLibraryUiStateMapper.focusSpace(model, lastFocusedGameId)
         }
     }
 

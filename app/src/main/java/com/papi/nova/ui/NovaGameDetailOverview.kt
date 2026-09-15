@@ -229,10 +229,17 @@ internal fun NovaGameDetailOverview(
                 onCorrectMatch = { onDestination(NovaGameDetailDestination.ARTWORK) },
             )
 
-            NovaGameDetailStatusLine(
+            if (game.space == null) NovaGameDetailStatusLine(
                 uiState = uiState,
                 optimizationState = optimizationState,
                 modifier = Modifier.padding(top = 11.dp),
+            )
+
+            if (game.space != null) Text(
+                text = "Save In Your Game Before Disconnecting. Leaving Ends This Space’s Game Session.",
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 10.dp).testTag("nova-space-exit-notice"),
             )
 
             if (reviewExpanded) {

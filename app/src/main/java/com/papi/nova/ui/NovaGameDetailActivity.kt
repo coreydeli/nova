@@ -454,7 +454,7 @@ class NovaGameDetailActivity : NovaActivity() {
                 runCatching { NovaLibraryActiveSessionUiState.from(apiClient.getSessionStatus()) }
                     .getOrNull()
             }
-            activeSession = session?.takeIf {
+            activeSession = if (NovaSpaceUiState.isSpace(game)) NovaSpaceUiState.matchingSession(game, session) else session?.takeIf {
                 it.gameUuid.equals(game.id, ignoreCase = true) || it.gameId == game.appId
             }
         }
@@ -1250,7 +1250,7 @@ class NovaGameDetailActivity : NovaActivity() {
         fun buildPlaySetupRows(): List<NovaPlaySetupRowState> {
             val rows = mutableListOf<NovaPlaySetupRowState>()
             if (playDestinations.isNotEmpty()) rows += NovaPlaySetupRowState(
-                row = NovaPlaySetupRow.PLAY_IN, label = "Play In",
+                row = NovaPlaySetupRow.PLAY_IN, label = "Change Space",
                 caption = environmentError ?: if (environmentChanging) "Changing Your Environment…" else
                     "Choose whose games, Steam sign-in, and saves to use.",
                 value = currentGame.space?.name ?: "Desktop", stripTitle = "Where This Game Opens",
@@ -1735,6 +1735,8 @@ class NovaGameDetailActivity : NovaActivity() {
                         getString(R.string.nova_game_detail_launch_retry_host_check)
                     } else if (optimizationState.reviewRequired) {
                         getString(R.string.nova_library_review_and_launch)
+                    } else if (currentGame.space != null) {
+                        if (currentGame.space?.target == "big-picture-v1") "Open Steam Big Picture" else "Play"
                     } else {
                         // Describe the same composed choices attemptLaunch() will send.
                         launchPreview.profileSummary

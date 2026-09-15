@@ -1,14 +1,18 @@
 package com.papi.nova.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.testTag
@@ -29,6 +33,7 @@ internal fun spaceStateLabel(state: String): String = when (state) {
     else -> "Unavailable"
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun NovaSpaceChooser(snapshot: PolarisSpaces, busy: Boolean, error: String?,
     onChoose: (String) -> Unit, onBack: () -> Unit) {
@@ -46,10 +51,12 @@ internal fun NovaSpaceChooser(snapshot: PolarisSpaces, busy: Boolean, error: Str
     Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()
         .verticalScroll(rememberScrollState()).padding(24.dp).testTag("nova-space-chooser"),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Choose Where To Play", color = colors.textPrimary, fontSize = 28.sp)
+        Text("Change Space", color = colors.textPrimary, fontSize = 28.sp)
         Text("Choose your Space to browse its games and saves. Each Space keeps its own Steam sign-in.",
             color = colors.textSecondary, fontSize = 16.sp)
-        if (!snapshot.canSwitch) Text("End your stream before switching Spaces.", color = colors.textPrimary)
+        Text("The Space name identifies your gaming environment. Check or change the Steam account inside Steam Big Picture.",
+            color = colors.textSecondary, fontSize = 14.sp)
+        if (!snapshot.canSwitch) Text("Save your game and end your stream before switching Spaces.", color = colors.textPrimary)
         error?.let { Text(it, color = colors.textPrimary) }
         if (snapshot.desktopAllowed) {
             NovaActionButton(text = "Desktop", onClick = { onChoose("desktop") },
@@ -59,7 +66,14 @@ internal fun NovaSpaceChooser(snapshot: PolarisSpaces, busy: Boolean, error: Str
             Text("Your computer’s usual games and desktop.", color = colors.textSecondary, fontSize = 14.sp)
         }
         snapshot.spaces.forEach { space ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            val bringIntoView = remember(space.id) { BringIntoViewRequester() }
+            var rowFocused by remember(space.id) { mutableStateOf(false) }
+            LaunchedEffect(rowFocused) {
+                if (rowFocused) bringIntoView.bringIntoView()
+            }
+            Row(modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView)
+                .onFocusChanged { rowFocused = it.hasFocus },
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 NovaSpaceAvatar(space.name)
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 NovaActionButton(text = space.name, onClick = { onChoose(space.id) }, selected = space.selected,

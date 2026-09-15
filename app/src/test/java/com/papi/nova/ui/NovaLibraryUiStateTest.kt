@@ -9,6 +9,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NovaLibraryUiStateTest {
+
+    @Test fun focusedSpaceTitleAndOpenActionStayTogether() {
+        val first = game("space.alex.10", "First Game").copy(space = PolarisGame.SpaceContext("alex", "Alex", "10"))
+        val steam = game("space.alex.big-picture-v1", "Steam Big Picture").copy(space = PolarisGame.SpaceContext("alex", "Alex", "big-picture-v1"))
+        val model = NovaLibraryUiStateMapper.build(listOf(first, steam), "", NovaLibraryFilterState(), focusedGameId = steam.id)
+        assertEquals(steam.id, model.hero.game?.id)
+        assertEquals("Steam Big Picture", model.hero.title)
+        assertEquals(NovaLibraryHeroPrimaryAction.OPEN_DETAIL, model.hero.primaryAction)
+        val filtered = NovaLibraryUiStateMapper.build(listOf(first, steam), "First", NovaLibraryFilterState(), focusedGameId = steam.id)
+        assertEquals(first.id, filtered.hero.game?.id)
+    }
+
+    @Test fun sharedSpaceAppNumberDoesNotChooseAnotherGamesResumeArtwork() {
+        val id = com.papi.nova.manager.WorkerLaunchContract.APP_ID
+        val first = game("space.alex.10", "First Game").copy(appId = id, space = PolarisGame.SpaceContext("alex", "Alex", "10"))
+        val second = first.copy(id = "space.alex.20", name = "Second Game", space = PolarisGame.SpaceContext("alex", "Alex", "20"))
+        val session = NovaLibraryActiveSessionUiState(id, second.id, second.name, "Handheld", true, 0, false, false, 1920, 1080, 60f)
+        val model = NovaLibraryUiStateMapper.build(listOf(first, second), "", NovaLibraryFilterState(), activeSession = session, focusedGameId = first.id)
+        assertEquals(second.id, model.hero.game?.id)
+        assertEquals(NovaLibraryHeroPrimaryAction.RESUME, model.hero.primaryAction)
+        assertNull(NovaSpaceUiState.matchingSession(first, session))
+        assertEquals(session, NovaSpaceUiState.matchingSession(second, session))
+    }
     @Test
     fun assignedSpaceHasItsOwnDirectOpenAction() {
         for (id in listOf(com.papi.nova.manager.WorkerLaunchContract.APP_UUID,

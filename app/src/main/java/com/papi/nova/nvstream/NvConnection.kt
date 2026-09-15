@@ -450,12 +450,14 @@ class NvConnection(
         }
 
         val app = streamConfig.getApp()!!
+        if (streamConfig.getWorkerProfileId().isNotEmpty()) listener.stageStarting("space_starting")
         if (!h.launchApp(context, "launch", app.appUUID, app.appId, context.negotiatedHdr, false)) {
             listener.displayMessage("Failed to launch application")
             return false
         }
 
         LimeLog.info("Launched new game session")
+        if (streamConfig.getWorkerProfileId().isNotEmpty()) listener.stageStarting("space_connecting")
 
         return true
     }

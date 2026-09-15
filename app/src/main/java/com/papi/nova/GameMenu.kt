@@ -372,8 +372,12 @@ class GameMenu @JvmOverloads constructor(
     override fun showMenu(device: GameInputDevice?) {
         val options = ArrayList<MenuOption>()
 
-        options.add(MenuOption(getString(R.string.game_menu_disconnect), Runnable { game.disconnect() }))
-        options.add(MenuOption(getString(R.string.game_menu_quit_session), Runnable { game.quit() }))
+        if (game.isSpaceSession()) {
+            options.add(MenuOption("Leave Space", Runnable { game.quit() }))
+        } else {
+            options.add(MenuOption(getString(R.string.game_menu_disconnect), Runnable { game.disconnect() }))
+            options.add(MenuOption(getString(R.string.game_menu_quit_session), Runnable { game.quit() }))
+        }
         options.add(MenuOption(getString(R.string.game_menu_upload_clipboard), true, Runnable {
             game.sendClipboard(true)
         }))

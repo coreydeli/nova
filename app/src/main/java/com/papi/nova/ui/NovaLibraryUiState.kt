@@ -416,7 +416,8 @@ object NovaLibraryUiStateMapper {
         search: String,
         filterState: NovaLibraryFilterState,
         optionsState: NovaLibraryOptionsState = NovaLibraryOptionsState(),
-        activeSession: NovaLibraryActiveSessionUiState? = null
+        activeSession: NovaLibraryActiveSessionUiState? = null,
+        focusedGameId: String? = null,
     ): NovaLibraryUiModel {
         val filtered = filterGames(games, search, filterState, optionsState)
         val emptyState = emptyState(search, filterState)
@@ -430,12 +431,20 @@ object NovaLibraryUiStateMapper {
                 filteredGames = filtered,
                 activeSession = activeSession,
                 constraintsActive = search.isNotBlank() || filterState.hasActiveConstraint,
-                emptyState = emptyState
+                emptyState = emptyState,
             ),
             summary = summary(games),
             emptyState = emptyState,
             resultCount = filtered.size
-        )
+        ).let { focusSpace(it, focusedGameId) }
+    }
+
+    /** Focus changes only the banner; filtering and sorting keep their cached model. */
+    fun focusSpace(model: NovaLibraryUiModel, focusedGameId: String?): NovaLibraryUiModel {
+        if (model.hero.reason == NovaLibraryHeroReason.ACTIVE_SESSION) return model
+        val focused = model.filteredGames.firstOrNull { it.id == focusedGameId && it.space != null } ?: return model
+        return model.copy(hero = gameHero(focused, NovaLibraryHeroReason.FIRST_FILTERED,
+            "Selected Game", "Open to play or change your setup."))
     }
 
     fun heroState(
@@ -560,7 +569,8 @@ object NovaLibraryUiStateMapper {
         games: List<PolarisGame>
     ): NovaLibraryHeroState {
         val matchingGame = games.firstOrNull { game ->
-            game.id == session.gameUuid || game.appId == session.gameId || game.name.equals(session.gameName, ignoreCase = true)
+            game.id == session.gameUuid || (!com.papi.nova.manager.WorkerLaunchContract.isProfileApp(session.gameUuid) &&
+                (game.appId == session.gameId || game.name.equals(session.gameName, ignoreCase = true)))
         }
         val badges = buildList {
             add("Active session")
