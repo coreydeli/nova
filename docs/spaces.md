@@ -92,3 +92,25 @@ required Spaces tab or a setup step for ordinary streaming. With one allowed Spa
 Removing a Space in Polaris retains its Steam data and installed games. It removes
 device access and does not reclaim disk space. Restore it and assign the device
 again before returning to Nova.
+
+## Check Sound And Stuttering
+
+For a comparison, ask the host owner to offer 1080p at 60 FPS for your device.
+In **Stream Settings**, choose **Auto** for **Frame Rate** and **Device Settings**
+for **Resolution**. Begin with one Space, then check again with the other
+players connected.
+
+If audio crackles or pauses, note the time, game, Space, stream settings, and
+whether the client uses Wi-Fi or Ethernet. Note whether picture or controls
+paused too. Low average latency and zero reported video packet loss do not rule
+out brief audio delivery pauses.
+
+Save before reconnecting: the current runtime ends its game session when the
+stream disconnects. It keeps the Space's installed games and saved data.
+
+When possible, repeat with the same client over Ethernet or another access
+point, keeping the game and stream settings unchanged. Ask the host owner to
+compare with downloads, builds, and updates paused. Change one thing at a time.
+The [Polaris troubleshooting steps](https://github.com/papi-ux/polaris/blob/master/docs/spaces.md#check-sound-and-stuttering)
+explain what to retain for Doctor & Support. Audio reliability is still being
+validated for the preview.
