@@ -1491,13 +1491,8 @@ class NovaLibraryActivity : NovaActivity() {
                     .padding(NovaLibraryUiStateMapper.screenPaddingDp(isLandscape).dp)
             ) {
                 val environments = spacesSnapshot?.takeIf { it.spaces.isNotEmpty() }
-                if (environments != null && !chooseSpaceVisible && space == null) {
-                    NovaEnvironmentBar(environments, !choosingSpace && spacesChecked,
-                        onChoose = ::showSpaceChooser, modifier = Modifier.align(Alignment.TopStart))
-                }
                 Box(
-                    modifier = Modifier.fillMaxSize().padding(top =
-                        if (environments != null && !chooseSpaceVisible && space == null) 60.dp else 0.dp)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     if (chooseSpaceVisible && spacesSnapshot != null) {
                         NovaSpaceChooser(spacesSnapshot!!, choosingSpace || !spacesChecked, spacesError,
@@ -1531,6 +1526,9 @@ class NovaLibraryActivity : NovaActivity() {
                                 hasActiveSession = activeSession != null,
                             )
                             NovaLibraryLandscapeShowcaseStripContent(
+                                environments = environments,
+                                environmentEnabled = !choosingSpace && spacesChecked,
+                                onChooseEnvironment = ::showSpaceChooser,
                                 hostLabel = serverName?.takeIf { it.isNotBlank() } ?: serverHost,
                                 resultCount = model.resultCount,
                                 layoutLabel = layoutModeLabel(model.optionsState.layoutMode),
@@ -1605,7 +1603,19 @@ class NovaLibraryActivity : NovaActivity() {
                                 .padding(bottom = controllerHintBarBottomPadding),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            NovaLibraryTopHeader(
+                            if (environments != null) {
+                                NovaLibraryLandscapeShowcaseStripContent(
+                                    hostLabel = serverName.orEmpty().ifBlank { serverHost },
+                                    resultCount = model.resultCount,
+                                    layoutLabel = layoutModeLabel(model.optionsState.layoutMode),
+                                    polarisReady = clientSettings != null,
+                                    onOpenOptions = onOpenOptions,
+                                    onOpenSystemMenu = onOpenSystemMenu,
+                                    environments = environments,
+                                    environmentEnabled = !choosingSpace && spacesChecked,
+                                    onChooseEnvironment = ::showSpaceChooser,
+                                )
+                            } else NovaLibraryTopHeader(
                                 serverName = serverName,
                                 serverHost = serverHost,
                                 model = model,

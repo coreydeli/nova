@@ -8,6 +8,8 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,6 +37,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -74,6 +77,7 @@ import com.papi.nova.ui.compose.NovaRadius
 import kotlinx.coroutines.Job
 import com.papi.nova.R
 import com.papi.nova.api.PolarisApiClient
+import com.papi.nova.api.PolarisSpaces
 import com.papi.nova.shared.polaris.model.PolarisGame
 import com.papi.nova.ui.compose.LocalNovaComposeColors
 import com.papi.nova.ui.compose.LocalNovaLibrarySurfaces
@@ -95,8 +99,10 @@ internal fun NovaLibraryLandscapeStageShell(
     reserveControllerHintSpace: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val hintLineHeight = with(LocalDensity.current) { LocalTextStyle.current.lineHeight.toDp() }
     val bottomPaddingDp = if (reserveControllerHintSpace) {
-        NovaLibraryUiStateMapper.controllerHintBarBottomPaddingDp(isLandscape = true)
+        maxOf(NovaLibraryUiStateMapper.controllerHintBarBottomPaddingDp(isLandscape = true),
+            (hintLineHeight.value + 12f).roundToInt())
     } else {
         0
     }
@@ -257,10 +263,18 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
     onOpenOptions: () -> Unit,
     onOpenSystemMenu: () -> Unit,
     continueSlot: (@Composable RowScope.() -> Unit)? = null,
+    environments: PolarisSpaces? = null,
+    environmentEnabled: Boolean = true,
+    onChooseEnvironment: () -> Unit = {},
 ) {
     val surfaces = LocalNovaLibrarySurfaces.current
     val largeText = LocalDensity.current.fontScale >= 1.5f
     val shape = RoundedCornerShape(NovaRadius.row)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    // Keep one row even on narrow screens or with enlarged text. Controller
+    // focus scrolls the row so every action keeps its full touch target.
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val rowWidth = maxOf(maxWidth, (if (continueSlot != null) 800.dp else 520.dp) * fontScale)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -268,12 +282,16 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
             .clip(shape)
             .background(surfaces.panel.copy(alpha = 0.34f * LocalNovaMenuOpacityScale.current))
             .border(1.dp, surfaces.tileBorder, shape)
+            .then(if (environments != null) Modifier.horizontalScroll(rememberScrollState()).width(rowWidth) else Modifier)
             .padding(horizontal = 10.dp, vertical = 5.5.dp)
             .testTag("nova-library-landscape-toolbar"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        NovaLibraryToolbarIdentity(
+        if (environments != null) {
+            NovaEnvironmentBar(environments, environmentEnabled, onChooseEnvironment,
+                modifier = Modifier.width(300.dp * fontScale), compact = true)
+        } else NovaLibraryToolbarIdentity(
             hostLabel = hostLabel,
             cinematic = true,
             modifier = Modifier.widthIn(min = 104.dp, max = 168.dp),
@@ -308,6 +326,7 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
         NovaLibraryToolbarSystemAction(
             onClick = onOpenSystemMenu,
         )
+    }
     }
 }
 

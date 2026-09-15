@@ -17,20 +17,21 @@ import com.papi.nova.api.PolarisSpaces
 import com.papi.nova.ui.compose.LocalNovaComposeColors
 import com.papi.nova.ui.compose.NovaActionButton
 
-/** Environment identity stays above the same library on handhelds and TVs. */
+/** Environment identity can share the library toolbar on handhelds and TVs. */
 @Composable
 internal fun NovaEnvironmentBar(spaces: PolarisSpaces, enabled: Boolean, onChoose: () -> Unit,
-    modifier: Modifier = Modifier) {
+    modifier: Modifier = Modifier, compact: Boolean = false) {
     val colors = LocalNovaComposeColors.current
     val name = spaces.selected?.name ?: "Desktop"
-    Row(modifier.fillMaxWidth().heightIn(min = 54.dp).testTag("nova-library-environment"),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        NovaSpaceAvatar(name)
-        Text("Playing In", color = colors.textSecondary, fontSize = 14.sp)
-        Text(name, color = colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+    Row(modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 54.dp).testTag("nova-library-environment"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
+        NovaSpaceAvatar(name, if (compact) Modifier.size(28.dp) else Modifier)
+        Text("Playing In", color = colors.textSecondary, fontSize = if (compact) 11.sp else 14.sp, maxLines = 1)
+        Text(name, color = colors.textPrimary, fontSize = if (compact) 13.sp else 16.sp, fontWeight = FontWeight.SemiBold,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (spaces.spaces.size + (if (spaces.desktopAllowed) 1 else 0) > 1) {
             NovaActionButton(text = "Change Space", onClick = onChoose, enabled = enabled, minHeight = 48.dp,
+                fontSize = if (compact) 11.sp else 13.sp,
                 contentDescription = "Playing In $name. Change Space.",
                 modifier = Modifier.testTag("nova-environment-choose"))
         }
