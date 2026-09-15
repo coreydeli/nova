@@ -94,8 +94,8 @@ class NovaLaunchSourceGuardTest {
             detail.contains("mirrorDesktop = true") &&
                 serverHelper.contains("Game.EXTRA_MIRROR_DESKTOP") &&
                 game.contains("EXTRA_MIRROR_DESKTOP") &&
-                game.contains(".setMirrorDesktop(mirrorDesktop)") &&
-                game.contains(".setForcePrivateAfterSteamClose(forcePrivateAfterSteamClose)") &&
+                game.contains(".setMirrorDesktop(workerLaunch == null && mirrorDesktop)") &&
+                game.contains(".setForcePrivateAfterSteamClose(workerLaunch == null && forcePrivateAfterSteamClose)") &&
                 streamConfiguration.contains("fun setMirrorDesktop(enable: Boolean)") &&
                 streamConfiguration.contains("fun setForcePrivateAfterSteamClose(enable: Boolean)") &&
                 nvHttp.contains("&mirrorDesktop=") &&
@@ -686,7 +686,10 @@ class NovaLaunchSourceGuardTest {
             launchGame.contains("val launchResolution = StreamSyncManager.resolveAutoSafeResolution(") &&
                 launchGame.contains("val launchFps = StreamSyncManager.resolveAutoSafeTargetFps(")
         )
-        val pairedSettingsPush = launchGame.substringAfter("NovaLaunchPreflight.push(").substringBefore("\n                    )")
+        val pairedSettingsPush = launchGame.substringAfter("NovaLaunchPreflight.push(").substringBefore("val app = NvApp")
+        val spaceGuard = launchGame.indexOf("if (!NovaSpaceUiState.isSpace(game))")
+        assertTrue("a Space launch must skip the ordinary paired-settings write",
+            spaceGuard >= 0 && spaceGuard < launchGame.indexOf("NovaLaunchPreflight.push("))
         assertTrue(
             "preset-normalized launch fields must not become durable paired-client settings",
             pairedSettingsPush.contains("width = preferences.width") &&

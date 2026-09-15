@@ -40,7 +40,8 @@ class NovaArtworkStudioSourceGuardTest {
         )
 
         assertTrue(update.contains("buildArtworkLibraryUpdateBody()"))
-        assertTrue(update.contains(".url(\"\$baseUrl/games/\$gameId/artwork/resolve\")"))
+        assertTrue(update.contains("artworkLibraryUpdatePath(gameId)"))
+        assertTrue(update.contains(".url(\"\$baseUrl\$path\")"))
         assertTrue(update.contains("parseArtworkLibraryUpdateResponse(json)"))
         assertTrue(update.contains("executeArtwork(request)"))
         assertTrue(update.propagatesCancellation())

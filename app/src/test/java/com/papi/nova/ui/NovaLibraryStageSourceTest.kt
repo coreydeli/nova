@@ -236,7 +236,7 @@ class NovaLibraryStageSourceTest {
         assertTrue(activity.contains("override fun dispatchTouchEvent(event: MotionEvent): Boolean"))
         assertTrue(activity.contains("controllerHintChromeState.visible"))
         assertTrue(activity.contains("AnimatedVisibility("))
-        assertTrue(activity.contains("visible = stageMode || controllerHintsVisible"))
+        assertTrue(activity.contains("visible = space == null && (stageMode || controllerHintsVisible)"))
     }
 
     @Test
@@ -324,7 +324,7 @@ class NovaLibraryStageSourceTest {
         assertTrue(backdrop < windowContent)
         assertTrue(activity.contains("reserveControllerHintSpace = true"))
         assertFalse(activity.contains("reserveControllerHintSpace = !stageMode"))
-        assertTrue(activity.contains("visible = stageMode || controllerHintsVisible"))
+        assertTrue(activity.contains("visible = space == null && (stageMode || controllerHintsVisible)"))
     }
 
     @Test
@@ -567,7 +567,7 @@ class NovaLibraryStageSourceTest {
         assertTrue(screen.contains("val visibleControllerHints = if (largeText)"))
         assertTrue(screen.contains("controllerHints.filterIndexed { index, _ -> index in LARGE_TEXT_HINT_INDICES }"))
         assertTrue(screen.contains("val controllerHintDescription = controllerHints.joinToString(separator = \" · \")"))
-        assertTrue(screen.contains("visible = stageMode || controllerHintsVisible"))
+        assertTrue(screen.contains("visible = space == null && (stageMode || controllerHintsVisible)"))
         assertTrue(screen.contains("NovaLibraryCinematicControllerHints("))
         assertTrue(screen.contains("hints = visibleControllerHints"))
         assertTrue(screen.contains("semanticsDescription = controllerHintDescription"))

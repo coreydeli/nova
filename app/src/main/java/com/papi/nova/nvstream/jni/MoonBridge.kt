@@ -338,6 +338,7 @@ class MoonBridge {
             videoCapabilities: Int,
             colorSpace: Int,
             colorRange: Int,
+            workerProfile: Boolean,
         ): Int
 
         @JvmStatic external fun stopConnection()

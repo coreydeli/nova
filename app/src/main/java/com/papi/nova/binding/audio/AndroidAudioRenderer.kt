@@ -9,6 +9,7 @@ import android.media.AudioTrack
 import android.media.MediaRouter
 import android.media.audiofx.AudioEffect
 import android.os.Build
+import android.os.Process
 import com.papi.nova.LimeLog
 import com.papi.nova.nvstream.av.audio.AudioRenderer
 import com.papi.nova.nvstream.jni.MoonBridge
@@ -20,6 +21,7 @@ class AndroidAudioRenderer(
     private val enableAudioFx: Boolean
 ) : AudioRenderer {
     private var track: AudioTrack? = null
+    private var playbackStats = AudioPlaybackStats()
     @Volatile
     private var trackStarted = false
     @Volatile
@@ -120,6 +122,7 @@ class AndroidAudioRenderer(
             try {
                 track = createAudioTrack(channelConfig, sampleRate, bufferSize, lowLatency)
                 trackStarted = false
+                playbackStats = AudioPlaybackStats()
                 LimeLog.info("Audio track configuration: $bufferSize $lowLatency")
                 break
             } catch (e: Exception) {
@@ -138,18 +141,63 @@ class AndroidAudioRenderer(
     override fun playDecodedAudio(audioData: ShortArray) {
         val audioTrack = track ?: return
         if (!trackStarted) {
+            // Setup runs on a different thread. Apply the audio priority here,
+            // on the dedicated native playback thread that exits with this stream.
+            configurePlaybackThread()
             audioTrack.play()
             trackStarted = true
             logRoutedAudioDevice(audioTrack)
         }
 
+        val startNs = System.nanoTime()
         hapticEngine?.feedAudioShort(audioData, audioTrack.sampleRate, audioTrack.channelCount)
-
-        if (MoonBridge.getPendingAudioDuration() < 40) {
+        val hapticsEndNs = System.nanoTime()
+        val pendingMs = MoonBridge.getPendingAudioDuration()
+        val skipped = pendingMs >= 40
+        val writeStartNs = System.nanoTime()
+        val writeResult = if (!skipped) {
             audioTrack.write(audioData, 0, audioData.size)
         } else {
-            LimeLog.info("Too much pending audio data: " + MoonBridge.getPendingAudioDuration() + " ms")
+            LimeLog.info("Too much pending audio data: $pendingMs ms")
+            0
         }
+        val endNs = System.nanoTime()
+        playbackStats.record(
+            startNs, hapticsEndNs, writeStartNs, endNs,
+            pendingMs, audioData.size, skipped, writeResult
+        )
+        if (playbackStats.reportDue(endNs)) reportPlaybackStats(audioTrack, endNs)
+    }
+
+    private fun configurePlaybackThread() {
+        try {
+            if (Process.getThreadPriority(Process.myTid()) > Process.THREAD_PRIORITY_AUDIO) {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+            }
+            LimeLog.info("Nova: audio playback thread priority=${Process.getThreadPriority(Process.myTid())}")
+        } catch (e: RuntimeException) {
+            LimeLog.warning("Nova: audio playback priority unavailable: ${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun reportPlaybackStats(audioTrack: AudioTrack, nowNs: Long) {
+        val stats = playbackStats.snapshot(nowNs) ?: return
+        // Vendor diagnostics must never prevent playback or release during cleanup.
+        val underruns = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) audioTrack.underrunCount else -1
+        } catch (_: Exception) { -1 }
+        val bufferFrames = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack.bufferSizeInFrames else -1
+        } catch (_: Exception) { -1 }
+        LimeLog.info(
+            "Nova: audio playback window_ms=${stats.durationMs} callbacks=${stats.callbacks} " +
+                "queue_skips=${stats.skippedPackets} pending_max_ms=${stats.maxPendingMs} " +
+                "written_samples=${stats.writtenSamples} short_writes=${stats.shortWrites} " +
+                "write_errors=${stats.writeErrors} last_write_error=${stats.lastWriteError} " +
+                "writes_over_20ms=${stats.slowWrites} write_max_us=${stats.maxWriteUs} " +
+                "callback_idle_max_us=${stats.maxIdleUs} haptics_max_us=${stats.maxHapticUs} " +
+                "underruns_total=$underruns buffer_frames=$bufferFrames"
+        )
     }
 
     private fun audioContextDisplayId(): Int {
@@ -289,6 +337,7 @@ class AndroidAudioRenderer(
 
     override fun cleanup() {
         val audioTrack = track ?: return
+        reportPlaybackStats(audioTrack, System.nanoTime())
         if (trackStarted) {
             audioTrack.pause()
             audioTrack.flush()

@@ -225,6 +225,8 @@ private var novaResilienceManager:com.papi.nova.manager.ConnectionResilienceMana
 private var novaEventSource:com.papi.nova.api.PolarisEventSource? = null
 private var polarisSseSawCurrentSessionEvent = false
 private var novaProgressOverlay:com.papi.nova.ui.SessionProgressOverlay? = null
+private var spaceSession = false
+fun isSpaceSession(): Boolean = spaceSession
 private var novaLockScreenOverlay:com.papi.nova.ui.LockScreenOverlay? = null
 private var novaReconnectOverlay:com.papi.nova.ui.ReconnectOverlay? = null
 private var spinner:SpinnerDialog? = null
@@ -1360,6 +1362,10 @@ Toast.makeText(this, R.string.nova_launch_deterministic_host_required, Toast.LEN
 finish()
 return
 }
+val workerLaunch = com.papi.nova.manager.WorkerLaunchContract.parse(launchOptimization)
+spaceSession = workerLaunch != null
+novaProgressOverlay?.setSpaceSession(spaceSession)
+val exactMediaCadence = launchResolvedProfileTrusted || workerLaunch != null
 val expectedLaunchTopology = if (launchResolvedProfileTrusted) {
 com.papi.nova.manager.LaunchTopologyEnvelope.resolvedSelection(launchOptimization).orEmpty()
 } else {
@@ -1448,11 +1454,12 @@ else
 LimeLog.info("Nova: Launch using explicit stream FPS " + watchStreamFps)
 }
 }
+if (workerLaunch != null) supportedVideoFormats = MoonBridge.VIDEO_FORMAT_H264
 var autoSafeTargetFps:Float = com.papi.nova.manager.StreamSyncManager.resolveAutoSafeTargetFps(
 launchRefreshRate,
 launchOptimization
 )
-if (!launchResolvedProfileTrusted &&
+if (!exactMediaCadence &&
 autoSafeTargetFps > 0f && autoSafeTargetFps + 0.5f < launchRefreshRate)
 {
 var displayCompatibleTargetFps:Float = com.papi.nova.manager.StreamSyncManager.resolveDisplayCompatibleAutoSafeTargetFps(
@@ -1467,7 +1474,7 @@ autoSafeTargetFps + " -> " + displayCompatibleTargetFps))
 autoSafeTargetFps = displayCompatibleTargetFps
 }
 }
-if (launchResolvedProfileTrusted && autoSafeTargetFps > 0f)
+if (exactMediaCadence && autoSafeTargetFps > 0f)
 {
 configuredStreamFrameRateFps = autoSafeTargetFps
 }
@@ -1493,7 +1500,7 @@ LimeLog.info("Display refresh rate: " + displayRefreshRate)
         // desired FPS setting here in accordance with the active display refresh rate.
         var roundedRefreshRate:Int = Math.round(displayRefreshRate)
 var chosenFrameRate:Float = if (configuredStreamFrameRateFps > 0f) configuredStreamFrameRateFps else prefConfig!!.fps
-if (!launchResolvedProfileTrusted &&
+if (!exactMediaCadence &&
 prefConfig!!.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS)
 {
 if (chosenFrameRate >= roundedRefreshRate)
@@ -1518,7 +1525,7 @@ LimeLog.info("Adjusting FPS target for screen to " + chosenFrameRate)
 }
 }
 
-if (!launchResolvedProfileTrusted && prefConfig!!.framePacingWarpFactor > 0)
+if (!exactMediaCadence && prefConfig!!.framePacingWarpFactor > 0)
 {
 chosenFrameRate *= prefConfig!!.framePacingWarpFactor
 }
@@ -1546,7 +1553,7 @@ LimeLog.info(("Nova: Auto Safe launch resolution " + displayWidth + "x" + displa
 displayWidth = autoSafeResolution!!.width
 displayHeight = autoSafeResolution!!.height
 }
-if (launchResolvedProfileTrusted && autoSafeTargetFps > 0f)
+if (exactMediaCadence && autoSafeTargetFps > 0f)
 {
 if (Math.abs(autoSafeTargetFps - launchRefreshRate) > 0.5f)
 {
@@ -1598,16 +1605,17 @@ displayHeight
 )
 .setLaunchRefreshRate(launchRefreshRate)
 .setRefreshRate(chosenFrameRate)
-.setVirtualDisplay(vDisplay)
-.setDisplayModeExplicit(displayModeExplicit)
-.setMirrorDesktop(mirrorDesktop)
-.setStreamMode(streamMode)
-.setEncoderBackend(encoderBackend)
-.setExpectedEncoder(if (launchResolvedProfileTrusted) encoderBackend else "")
+.setVirtualDisplay(workerLaunch == null && vDisplay)
+.setDisplayModeExplicit(workerLaunch == null && displayModeExplicit)
+.setMirrorDesktop(workerLaunch == null && mirrorDesktop)
+.setStreamMode(if (workerLaunch == null) streamMode else "")
+.setEncoderBackend(if (workerLaunch == null) encoderBackend else "")
+.setExpectedEncoder(if (launchResolvedProfileTrusted && workerLaunch == null) encoderBackend else "")
 .setExpectedTopology(expectedLaunchTopology)
-.setForcePrivateAfterSteamClose(forcePrivateAfterSteamClose)
-.setResolutionScaleFactor(prefConfig!!.resolutionScaleFactor)
-.setApp(app)
+.setForcePrivateAfterSteamClose(workerLaunch == null && forcePrivateAfterSteamClose)
+.setResolutionScaleFactor(if (workerLaunch == null) prefConfig!!.resolutionScaleFactor else 100)
+.setApp(if (workerLaunch != null) NvApp(appName ?: "Space",
+com.papi.nova.manager.WorkerLaunchContract.APP_UUID, com.papi.nova.manager.WorkerLaunchContract.APP_ID, false) else app)
 .setEnableUltraLowLatency(prefConfig!!.enableUltraLowLatency)
 .setForceFreshLaunch(forceFreshLaunch)
 .setResumeExistingOnly(resumeExistingRequested)
@@ -1615,17 +1623,25 @@ displayHeight
 .setEnableSops(prefConfig!!.enableSops)
 .setProfilePreference(launchProfilePreference)
 .setResolvedProfile(launchResolvedProfileTrusted)
+.setWorkerProfileId(workerLaunch?.id.orEmpty())
+.setWorkerTarget(workerLaunch?.target.orEmpty())
 .enableLocalAudioPlayback(prefConfig!!.playHostAudio)
 .setMaxPacketSize(1392)
 .setRemoteConfiguration(StreamConfiguration.STREAM_CFG_AUTO) // NvConnection will perform LAN and VPN detection
 .setSupportedVideoFormats(supportedVideoFormats)
 .setAttachedGamepadMask(gamepadMask)
 .setClientRefreshRateX100((displayRefreshRate * 100).toInt())
-.setAudioConfiguration(prefConfig!!.audioConfiguration)
+.setAudioConfiguration(if (workerLaunch == null) prefConfig!!.audioConfiguration else MoonBridge.AUDIO_CONFIGURATION_STEREO)
 .setColorSpace(decoderRenderer!!.getPreferredColorSpace())
 .setColorRange(decoderRenderer!!.getPreferredColorRange())
 .setPersistGamepadsAfterDisconnect(!prefConfig!!.multiController)
 .build()
+
+if (workerLaunch != null) {
+LimeLog.info("Nova: Space media contract ${workerLaunch.width}x${workerLaunch.height}x${workerLaunch.fps} " +
+"launchRate=${config.getLaunchRefreshRate()} announceRate=${config.getRefreshRate()} " +
+"displayRateX100=${config.getClientRefreshRateX100()}")
+}
 
 queuePolarisClientSettingsSnapshot(null)
 
@@ -2614,6 +2630,14 @@ forcePrivateRequested:Boolean,
 requestedEncoderBackend:String
 ):Boolean {
 if (!com.papi.nova.manager.StreamSyncManager.hasTrustedResolvedProfile(optimization)) return false
+if (optimization.opt("source") == com.papi.nova.manager.WorkerLaunchContract.SOURCE) {
+return com.papi.nova.manager.WorkerLaunchContract.honors(
+optimization, appUUID?.takeIf { it.isNotBlank() } ?: appId.toString(),
+requestedWidth, requestedHeight, requestedFps, clientMaximumFps, displayLocked,
+bitrateLocked, bitrateCeilingKbps, mirrorDesktopRequested, forcePrivateRequested,
+requestedEncoderBackend
+)
+}
 val topologyEnvelopeHonored = com.papi.nova.manager.LaunchTopologyEnvelope.matches(
 optimization = optimization,
 appIdentity = appUUID?.takeIf { it.isNotBlank() }
@@ -5450,13 +5474,15 @@ gravity = Gravity.CENTER_HORIZONTAL
 bottomMargin = dp(14)
 })
 val title = TextView(this@Game).apply {
-text = getString(R.string.nova_launch_issue_title)
+text = if (spaceSession) "Space Could Not Start" else getString(R.string.nova_launch_issue_title)
 setTextColor(NovaThemeManager.getTextPrimaryColor(this@Game))
 textSize = 20f
 }
 container.addView(title)
 val body = TextView(this@Game).apply {
-text = message
+text = if (spaceSession) listOfNotNull(conn?.lastHostRefusal?.message,
+    conn?.lastHostRefusal?.action ?: "Return to Library and try again. If this continues, open Spaces in Polaris and check Host Setup.")
+    .joinToString("\n\n") else message
 setTextColor(NovaThemeManager.getTextSecondaryColor(this@Game))
 textSize = 14f
 setPadding(0, dp(10), 0, dp(12))
@@ -5465,8 +5491,22 @@ val scroll = ScrollView(this@Game).apply {
 addView(body)
 }
 container.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+if (spaceSession) {
+val explanation = body.text
+var detailsVisible = false
+val details = Button(this@Game).apply {
+text = "View Details"
+isAllCaps = false
+setOnClickListener {
+detailsVisible = !detailsVisible
+body.text = if (detailsVisible) "$explanation\n\n$message" else explanation
+text = if (detailsVisible) "Hide Details" else "View Details"
+}
+}
+container.addView(details, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+}
 val dismiss = Button(this@Game).apply {
-text = getString(R.string.nova_launch_issue_dismiss)
+text = if (spaceSession) "Back To Library" else getString(R.string.nova_launch_issue_dismiss)
 isAllCaps = false
 setTextColor(NovaThemeManager.getTextPrimaryColor(this@Game))
 background = NovaSheetChrome.createActionBackground(this@Game)
@@ -6358,7 +6398,7 @@ source = com.papi.nova.api.PolarisEventSource(eventsEndpoint,
 object : com.papi.nova.api.PolarisEventSource.EventListener {
 override fun onSessionEvent(event:String, state:String, message:String) = deliverToCurrentSession {
 if (PolarisSessionEvents.isCurrentSessionEvent(event, state)) polarisSseSawCurrentSessionEvent = true
-novaProgressOverlay?.updateState(state, message)
+ novaProgressOverlay?.updateState(state, message)
 if (PolarisSessionEvents.shouldFinishGameActivity(event, state, polarisSseSawCurrentSessionEvent)) {
 handlePolarisHostSessionEnded()
 }
@@ -6533,7 +6573,7 @@ Toast.makeText(this, warning, Toast.LENGTH_LONG).show()
 }
 
 private fun reportClientPresentationIfNeeded(status:com.papi.nova.api.PolarisSessionStatus?) {
-if (status == null || !status!!.isStreaming || novaApiClient == null)
+if (status == null || !status!!.isStreaming || novaApiClient == null || !novaHasClientSettings())
 {
 return
 }
@@ -7013,6 +7053,10 @@ finish()
 }
 
  fun disconnect() {
+if (spaceSession && !hostSessionEnded) {
+quit()
+return
+}
 if (!hostSessionEnded)
 {
 prepareBackgroundResumeWindow()
@@ -7052,14 +7096,15 @@ sheet.window?.attributes?.token = companionPresentation.companionDialogWindowTok
 val container = NovaSheetChrome.createSheetContainer(context)
 
 val title = TextView(context).apply {
-setText(R.string.game_dialog_title_quit_confirm)
+if (spaceSession) text = "Leave Space?" else setText(R.string.game_dialog_title_quit_confirm)
 textSize = 20f
 NovaSheetChrome.styleSheetTitle(this)
 }
 container.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
 val message = TextView(context).apply {
-setText(R.string.game_dialog_message_quit_confirm)
+if (spaceSession) text = "Leaving ends this Space’s game session. Save in your game first. Installed games, saved progress, and your Steam sign-in stay in this Space. Other Spaces keep running."
+else setText(R.string.game_dialog_message_quit_confirm)
 textSize = 15f
 setPadding(0, UiHelper.dpToPx(context, 10f).toInt(), 0, UiHelper.dpToPx(context, 18f).toInt())
 setTextColor(com.papi.nova.ui.NovaThemeManager.getTextSecondaryColor(context))
@@ -7075,7 +7120,7 @@ setOnClickListener { sheet.dismiss() }
 container.addView(stay, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiHelper.dpToPx(context, 48f).toInt()))
 
 val endSession = TextView(context).apply {
-text = getString(R.string.game_dialog_action_end_session)
+text = if (spaceSession) "Leave Space" else getString(R.string.game_dialog_action_end_session)
 gravity = Gravity.CENTER
 NovaSheetChrome.styleSheetAction(this, destructive = true)
 setOnClickListener {

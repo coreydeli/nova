@@ -223,6 +223,7 @@ class PcGridAdapter(
         val statusDot = pcHolder.statusDot
         val statusText = pcHolder.statusText
         val statusHint = pcHolder.statusHint
+        statusHint?.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
         val primaryAction = pcHolder.primaryAction
         setPrimaryActionReady(primaryAction, false)
 
@@ -268,7 +269,15 @@ class PcGridAdapter(
                     statusText.setTextColor(NovaThemeManager.getTextMutedColor(context))
                     primaryAction?.setText(R.string.pcview_card_action_open_library)
                     setPrimaryActionReady(primaryAction, true)
-                    setStatusHint(statusHint, R.string.pcview_card_hint_open_library)
+                    if (obj.details.spacesAvailable) {
+                        statusHint?.text = "Spaces Available · Choose Your Space In Library"
+                        statusHint?.visibility = View.VISIBLE
+                        statusHint?.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_spaces_planet, 0, 0, 0)
+                        statusHint?.compoundDrawablePadding = 8
+                    } else {
+                        statusHint?.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
+                        setStatusHint(statusHint, R.string.pcview_card_hint_open_library)
+                    }
                 } else if (obj.details.libraryState == ComputerDetails.LibraryState.UNKNOWN) {
                     statusText.setText(R.string.pcview_card_status_checking_library)
                     statusText.setTextColor(NovaThemeManager.getTextMutedColor(context))

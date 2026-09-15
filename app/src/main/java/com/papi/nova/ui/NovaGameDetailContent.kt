@@ -345,7 +345,7 @@ internal fun NovaGameDetailContent(
                 headline = uiState.game.name,
                 scrollState = verticalScroll,
                 onDismiss = onDismissDestination,
-                headerAccessory = if (steamDecision == null && modePicker == null) {
+                headerAccessory = if (uiState.game.space == null && steamDecision == null && modePicker == null) {
                     {
                         NovaPlaySetupScopePill(
                             scope = playSetupScope,

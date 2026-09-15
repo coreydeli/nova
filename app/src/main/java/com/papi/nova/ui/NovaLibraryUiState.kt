@@ -116,6 +116,7 @@ enum class NovaLibraryHeroPrimaryAction {
     RESUME,
     WATCH,
     OPEN_DETAIL,
+    OPEN_SPACE,
     MANAGE_LIBRARY,
     CLEAR_FILTERS
 }
@@ -415,7 +416,8 @@ object NovaLibraryUiStateMapper {
         search: String,
         filterState: NovaLibraryFilterState,
         optionsState: NovaLibraryOptionsState = NovaLibraryOptionsState(),
-        activeSession: NovaLibraryActiveSessionUiState? = null
+        activeSession: NovaLibraryActiveSessionUiState? = null,
+        focusedGameId: String? = null,
     ): NovaLibraryUiModel {
         val filtered = filterGames(games, search, filterState, optionsState)
         val emptyState = emptyState(search, filterState)
@@ -429,12 +431,20 @@ object NovaLibraryUiStateMapper {
                 filteredGames = filtered,
                 activeSession = activeSession,
                 constraintsActive = search.isNotBlank() || filterState.hasActiveConstraint,
-                emptyState = emptyState
+                emptyState = emptyState,
             ),
             summary = summary(games),
             emptyState = emptyState,
             resultCount = filtered.size
-        )
+        ).let { focusSpace(it, focusedGameId) }
+    }
+
+    /** Focus changes only the banner; filtering and sorting keep their cached model. */
+    fun focusSpace(model: NovaLibraryUiModel, focusedGameId: String?): NovaLibraryUiModel {
+        if (model.hero.reason == NovaLibraryHeroReason.ACTIVE_SESSION) return model
+        val focused = model.filteredGames.firstOrNull { it.id == focusedGameId && it.space != null } ?: return model
+        return model.copy(hero = gameHero(focused, NovaLibraryHeroReason.FIRST_FILTERED,
+            "Selected Game", "Open to play or change your setup."))
     }
 
     fun heroState(
@@ -559,7 +569,8 @@ object NovaLibraryUiStateMapper {
         games: List<PolarisGame>
     ): NovaLibraryHeroState {
         val matchingGame = games.firstOrNull { game ->
-            game.id == session.gameUuid || game.appId == session.gameId || game.name.equals(session.gameName, ignoreCase = true)
+            game.id == session.gameUuid || (!com.papi.nova.manager.WorkerLaunchContract.isProfileApp(session.gameUuid) &&
+                (game.appId == session.gameId || game.name.equals(session.gameName, ignoreCase = true)))
         }
         val badges = buildList {
             add("Active session")
@@ -633,14 +644,16 @@ object NovaLibraryUiStateMapper {
         eyebrow: String,
         caption: String
     ): NovaLibraryHeroState {
+        val isSpace = com.papi.nova.manager.WorkerLaunchContract.isLegacyProfileApp(game.id)
         val badges = buildList {
+            if (isSpace || game.space != null) add("Space")
             if (game.lastLaunched > 0) add("Recent")
             if (game.hdrSupported) add("HDR")
             if (game.categoryLabel.isNotBlank()) add(game.categoryLabel)
             if (game.sourceLabel.isNotBlank()) add(game.sourceLabel)
             if (game.runtimeLabel.isNotBlank()) add(game.runtimeLabel)
         }.distinct()
-        val subtitle = game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
+        val subtitle = game.space?.let { "In ${it.name}" } ?: if (isSpace) "Gaming Space" else game.sourceRuntimeLabel.ifBlank { game.sourceLabel.ifBlank { "Nova library" } }
         val actionContext = when (reason) {
             NovaLibraryHeroReason.LAST_PLAYED -> "Continue"
             NovaLibraryHeroReason.FIRST_FILTERED -> if (eyebrow == "Filtered library") "Filtered" else "Ready"
@@ -659,21 +672,19 @@ object NovaLibraryUiStateMapper {
             game = game,
             title = game.name,
             subtitle = subtitle,
-            caption = caption,
-            eyebrow = eyebrow,
-            // This opens the game's window; it does not start a stream. It said
-            // "Launch" while its action was OPEN_DETAIL -- the one hero whose label
-            // disagreed with what it does. The action is the deliberate half: the
-            // detail window is where you decide how to play, so the hero gets you there.
-            actionLabel = "Open",
+            caption = if (isSpace) "Your own sign-ins, games, and saves. Manage device access in Spaces in Polaris." else caption,
+            eyebrow = if (isSpace) "Your Space" else eyebrow,
+            // Spaces open through their dedicated guarded launch flow. Ordinary
+            // games retain the details window for choosing how to play.
+            actionLabel = if (isSpace) "Open Space" else "Open",
             badges = badges,
             reason = reason,
-            primaryAction = NovaLibraryHeroPrimaryAction.OPEN_DETAIL,
+            primaryAction = if (isSpace) NovaLibraryHeroPrimaryAction.OPEN_SPACE else NovaLibraryHeroPrimaryAction.OPEN_DETAIL,
             supportingLine = listOf(actionContext, subtitle)
                 .filter { it.isNotBlank() }
                 .joinToString(" • "),
             artworkFallbackTitle = game.name,
-            artworkFallbackSubtitle = fallbackSubtitle
+            artworkFallbackSubtitle = if (isSpace) "Gaming Space" else fallbackSubtitle
         )
     }
 

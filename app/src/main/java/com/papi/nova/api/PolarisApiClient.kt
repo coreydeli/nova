@@ -161,13 +161,13 @@ class PolarisApiClient @JvmOverloads constructor(
     fun <T> withCurrentSessionStatus(consumer: (PolarisSessionStatus?) -> T): T = consumer(mutableSessionStatus.value)
     @Synchronized fun invalidateLiveTuningEvent() {
         val current = mutableSessionStatus.value ?: return
-        if (current.liveTuningPresent) publishStatus(current.copy(liveTuning = null, liveTuningPresent = true))
+        if (current.liveTuningPresent) publishStatus(current.copy(liveTuning = null, liveTuningPresent = true, liveTuningUnavailable = false))
     }
     @Synchronized fun acceptLiveTuningEvent(live: LiveTuningStatus) {
         val current = mutableSessionStatus.value ?: return
         if (current.liveTuning?.hostInstance == live.hostInstance &&
             current.sessionGeneration == live.sessionGeneration && current.appSessionId == live.appSessionId) {
-            publishStatus(current.copy(liveTuning = live, liveTuningPresent = true))
+            publishStatus(current.copy(liveTuning = live, liveTuningPresent = true, liveTuningUnavailable = false))
         }
     }
     // Status reads are authoritative resync boundaries. Serializing their I/O
@@ -327,6 +327,16 @@ class PolarisApiClient @JvmOverloads constructor(
         @JvmStatic
         fun isSafeArtworkGameId(gameId: String): Boolean =
             SAFE_GAME_ID.matches(gameId) && gameId != "." && gameId != ".."
+
+        internal fun artworkLibraryUpdatePath(gameId: String): String {
+            if (gameId.startsWith("space.")) {
+                val identity = requireNotNull(com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(gameId))
+                require(identity.second != "big-picture-v1")
+                return "/games/$gameId/space-artwork/resolve"
+            }
+            require(isSafeArtworkGameId(gameId))
+            return "/games/$gameId/artwork/resolve"
+        }
 
         @JvmStatic
         fun artworkPresentationKey(game: PolarisGame, kind: String): String {
@@ -518,6 +528,13 @@ class PolarisApiClient @JvmOverloads constructor(
             kind: String = PolarisGame.ARTWORK_KIND_POSTER,
         ): String? {
             val normalizedKind = kind.trim().lowercase()
+            val space = game.space
+            if (space != null) {
+                val identity = com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(game.id) ?: return null
+                if (identity.first != space.id || identity.second != space.target ||
+                    identity.second == "big-picture-v1" || normalizedKind !in setOf("poster", "hero", "logo", "icon")) return null
+                return resolveManifestPath(host, port, "/polaris/v1/games/${game.id}/space-artwork/$normalizedKind")
+            }
             game.artworkAsset(normalizedKind)
                 ?.takeIf { it.cached }
                 ?.let { resolveManifestPath(host, port, it.url) }
@@ -1756,6 +1773,8 @@ class PolarisApiClient @JvmOverloads constructor(
                 dynamicRange = json.optInt("dynamic_range", 0),
                 liveTuning = LiveTuningStatus.parse(json.optJSONObject("live_tuning")),
                 liveTuningPresent = json.has("live_tuning"),
+                liveTuningUnavailable = json.opt("source") == com.papi.nova.manager.WorkerLaunchContract.SOURCE &&
+                    json.has("live_tuning") && json.isNull("live_tuning"),
                 adaptiveBitrateEnabled = json.optBoolean("adaptive_bitrate_enabled", false),
                 adaptiveTargetBitrateKbps = json.optInt("adaptive_target_bitrate_kbps", 0),
                 aiAutoQualityEnabled = json.optBoolean(
@@ -2326,6 +2345,54 @@ class PolarisApiClient @JvmOverloads constructor(
         }
     }
 
+    /** A missing endpoint is the only legacy fallback. Other failures keep actions disabled. */
+    fun getSpaces(): PolarisSpaces? {
+        val request = Request.Builder().url("$baseUrl/spaces").build()
+        executeGetWithRetry(request).use { response ->
+            if (response.code == 404) return null
+            return readSpaces(response)
+        }
+    }
+
+    fun getSpaceLibrary(id: String): List<PolarisGame> {
+        require(Regex("[A-Za-z0-9_][A-Za-z0-9_-]{0,127}").matches(id))
+        val request = Request.Builder().url("$baseUrl/spaces/library?space_id=$id").build()
+        executeGetWithRetry(request).use { response ->
+            if (response.code != 200) throw IOException("Could not load this Space library.")
+            val bytes = response.body?.let { PolarisArtworkDiskCache.readBounded(it.byteStream(), 2 * 1024 * 1024) }
+                ?: throw IOException("Empty Space library response.")
+            val json = JSONObject(bytes.toString(Charsets.UTF_8))
+            if (json.opt("status") != true || json.optString("space_id") != id) throw IOException("Space identity changed.")
+            val array = json.getJSONArray("games")
+            if (array.length() > 4097) throw IOException("Space library is too large.")
+            val games = (0 until array.length()).map { PolarisGameJsonAdapter.fromJson(array.getJSONObject(it)) }
+            if (games.any { it.space?.id != id } || games.map { it.id }.toSet().size != games.size)
+                throw IOException("Invalid Space library identities.")
+            return games
+        }
+    }
+
+    fun getDesktopGames(): List<PolarisGame> = paginateAllGames(100) { offset ->
+        getGamesPageOrThrow(limit = 100, offset = offset, environment = "desktop")
+    }
+
+    fun selectSpace(id: String, previousId: String): PolarisSpaces {
+        val body = JSONObject().put("space_id", id).put("previous_space_id", previousId).toString()
+        val request = Request.Builder().url("$baseUrl/spaces/select")
+            .post(okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), body)).build()
+        // Never automatically replay a choice after an uncertain response.
+        executeNonRetryable(request).use { return readSpaces(it) }
+    }
+
+    private fun readSpaces(response: okhttp3.Response): PolarisSpaces {
+        if (response.code != 200) throw PolarisApiRejectedException(PolarisApiRejection(response.code,
+            "space_request_rejected", if (response.code == 409) "Space changed or still in use. Refresh and try again."
+                else "Could not update Spaces. Check the connection and device access in Polaris."))
+        val bytes = response.body?.let { PolarisArtworkDiskCache.readBounded(it.byteStream(), 2 * 1024 * 1024) }
+            ?: throw IOException("Could not read Space status.")
+        return PolarisSpaces.parse(bytes.toString(Charsets.UTF_8)) ?: throw IOException("Could not verify Space status.")
+    }
+
     fun getClientSettings(): PolarisClientSettings? {
         return try {
             val request = Request.Builder().url("$baseUrl/client-settings").build()
@@ -2413,8 +2480,10 @@ class PolarisApiClient @JvmOverloads constructor(
         source: String = "",
         limit: Int = 50,
         offset: Int = 0,
+        environment: String = "",
     ): List<PolarisGame> {
         var url = "$baseUrl/games?limit=${limit.coerceAtLeast(1)}&offset=${offset.coerceAtLeast(0)}"
+        if (environment == "desktop") url += "&environment=desktop"
         if (search.isNotEmpty()) url += "&search=$search"
         if (source.isNotEmpty()) url += "&source=$source"
 
@@ -2507,11 +2576,11 @@ class PolarisApiClient @JvmOverloads constructor(
 
 
     fun updateArtworkForLibrary(gameId: String): PolarisArtworkUpdateResult {
-        require(isSafeArtworkGameId(gameId))
+        val path = artworkLibraryUpdatePath(gameId)
         val body = buildArtworkLibraryUpdateBody()
         try {
             val request = Request.Builder()
-                .url("$baseUrl/games/$gameId/artwork/resolve")
+                .url("$baseUrl$path")
                 .post(okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), body.toString()))
                 .build()
             return executeArtwork(request).use { response ->
@@ -2785,6 +2854,15 @@ class PolarisApiClient @JvmOverloads constructor(
         resolveArtworkBitmap(buildArtworkLoadSpec(game, PolarisGame.ARTWORK_KIND_ICON))
 
     fun loadArtworkInto(view: ImageView, game: PolarisGame, kind: String) {
+        val space = game.space
+        if (kind.trim().lowercase() == PolarisGame.ARTWORK_KIND_POSTER && space?.target == "big-picture-v1" &&
+            com.papi.nova.manager.WorkerLaunchContract.libraryIdentity(game.id) == (space.id to space.target)) {
+            view.setTag(R.id.nova_artwork_request_key, "bundled-steam:${game.id}")
+            (view.getTag(R.id.nova_artwork_job) as? Job)?.cancel()
+            view.setTag(R.id.nova_artwork_job, null)
+            view.setImageResource(R.drawable.nova_steam_big_picture)
+            return
+        }
         val spec = buildArtworkLoadSpec(game, kind)
 
         view.setTag(R.id.nova_artwork_request_key, spec.cacheKey)

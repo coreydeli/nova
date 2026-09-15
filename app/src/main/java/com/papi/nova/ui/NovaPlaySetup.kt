@@ -405,6 +405,7 @@ internal enum class NovaPlaySetupScope { THIS_GAME, EVERY_GAME }
  * shape, so the scope pill changes the subject and nothing else.
  */
 internal enum class NovaPlaySetupRow {
+    PLAY_IN,
     WHERE_IT_RUNS,
     RESOLUTION,
     FRAME_RATE,

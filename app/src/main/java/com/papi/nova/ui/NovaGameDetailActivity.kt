@@ -138,6 +138,9 @@ class NovaGameDetailActivity : NovaActivity() {
     private lateinit var shortcutHelper: ShortcutHelper
     private lateinit var artworkViewModel: NovaArtworkLibraryUpdateViewModel
     private lateinit var launchViewModel: NovaGameDetailLaunchViewModel
+    private var directSpaceOpen = false
+    private var spaceGame: PolarisGame? = null
+    private var spaceLaunchDelivered = false
     private var defaultToVirtualDisplay: Boolean = false
     private var clientSettings: PolarisClientSettings? = null
     private var serverName: String = ""
@@ -183,6 +186,7 @@ class NovaGameDetailActivity : NovaActivity() {
             RESULT_OK,
             Intent()
                 .putExtra(EXTRA_RESULT_SESSION, request)
+                .putExtra(EXTRA_RESULT_SPACE, spaceGame?.let(PolarisGameJson::encode))
                 .putExtra(EXTRA_RESULT_GAME, updatedGame?.let { PolarisGameJson.encode(it) }),
         )
         finish()
@@ -270,6 +274,12 @@ class NovaGameDetailActivity : NovaActivity() {
             finish()
             return
         }
+        spaceGame = game.takeIf(NovaSpaceUiState::isSpace)
+        directSpaceOpen = spaceGame != null && savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_SPACE, false)
+        if (intent.getBooleanExtra(EXTRA_PLAY_SETUP, false) ||
+            spaceGame != null && intent.getBooleanExtra(EXTRA_SPACE_SETTINGS, false)) {
+            destination = NovaGameDetailDestination.PLAY_SETUP
+        }
         defaultToVirtualDisplay = intent.getBooleanExtra(EXTRA_DEFAULT_VIRTUAL_DISPLAY, false)
 
         serverName = intent.getStringExtra(EXTRA_SERVER_NAME).orEmpty().ifBlank { host }
@@ -324,7 +334,7 @@ class NovaGameDetailActivity : NovaActivity() {
         if (!::shortcutHelper.isInitialized) return
         val hostUuid = serverUuid?.takeIf { it.isNotBlank() }
         val appId = shortcutGameAppId
-        shortcutPinState = if (hostUuid == null || appId == null) {
+        shortcutPinState = if (spaceGame != null || hostUuid == null || appId == null) {
             GameShortcutPinState.UNSUPPORTED
         } else {
             shortcutHelper.getGameShortcutPinState(hostUuid, appId)
@@ -370,6 +380,13 @@ class NovaGameDetailActivity : NovaActivity() {
             modePickerOpen = false
             true
         }
+        spaceGame != null && destination == NovaGameDetailDestination.PLAY_SETUP &&
+            intent.getBooleanExtra(EXTRA_SPACE_SETTINGS, false) -> {
+            // Settings opened from Library return to its selected Space and live status.
+            publishGameUpdate()
+            finish()
+            true
+        }
         destination != NovaGameDetailDestination.OVERVIEW -> {
             destination = NovaGameDetailDestination.OVERVIEW
             steamDecision = null
@@ -388,7 +405,7 @@ class NovaGameDetailActivity : NovaActivity() {
         // Y is unclaimed everywhere else in this window, so the scope flip takes
         // nothing from anyone. Claimed only while Play Setup is open: a key that acts
         // on a panel that is not on screen is a key that does something invisible.
-        if (keyCode == KeyEvent.KEYCODE_BUTTON_Y && destination == NovaGameDetailDestination.PLAY_SETUP) {
+        if (spaceGame == null && keyCode == KeyEvent.KEYCODE_BUTTON_Y && destination == NovaGameDetailDestination.PLAY_SETUP) {
             selectPlaySetupScope(
                 if (playSetupScope == NovaPlaySetupScope.THIS_GAME) {
                     NovaPlaySetupScope.EVERY_GAME
@@ -402,7 +419,7 @@ class NovaGameDetailActivity : NovaActivity() {
     }
 
     private fun selectPlaySetupScope(scope: NovaPlaySetupScope) {
-        if (playSetupScope == scope) {
+        if (spaceGame != null || playSetupScope == scope) {
             return
         }
         playSetupScope = scope
@@ -437,7 +454,7 @@ class NovaGameDetailActivity : NovaActivity() {
                 runCatching { NovaLibraryActiveSessionUiState.from(apiClient.getSessionStatus()) }
                     .getOrNull()
             }
-            activeSession = session?.takeIf {
+            activeSession = if (NovaSpaceUiState.isSpace(game)) NovaSpaceUiState.matchingSession(game, session) else session?.takeIf {
                 it.gameUuid.equals(game.id, ignoreCase = true) || it.gameId == game.appId
             }
         }
@@ -461,6 +478,10 @@ class NovaGameDetailActivity : NovaActivity() {
         val deviceName = DeviceUtils.getModel()
 
         val retainedSteamLaunchMode = launchViewModel.steamLaunchModeSnapshot().displayMode
+        var environmentChanging by mutableStateOf(false)
+        var environmentError by mutableStateOf<String?>(null)
+        var environmentSnapshot by mutableStateOf<com.papi.nova.api.PolarisSpaces?>(null)
+        var playDestinations by mutableStateOf<List<NovaPlayDestination>>(emptyList())
         var currentGame by mutableStateOf(
             game.copy(
                 steamLaunch = game.steamLaunch?.copy(mode = retainedSteamLaunchMode),
@@ -475,7 +496,7 @@ class NovaGameDetailActivity : NovaActivity() {
         // Which row the comparison strip is explaining. It follows focus, and a tap sets
         // it too -- touch has no cursor for the strip to follow, and a finger that lands
         // on a row should get the same explanation a d-pad would.
-        explainedRow = NovaPlaySetupRow.WHERE_IT_RUNS
+        explainedRow = if (spaceGame != null) NovaPlaySetupRow.PLAY_IN else NovaPlaySetupRow.WHERE_IT_RUNS
         // An explicit resolution, held until launch rather than launching on the spot.
         // Picking one used to start the game immediately, which is why the row that owned
         // it could not be a setting: there was nothing to set. The choice itself is
@@ -521,6 +542,9 @@ class NovaGameDetailActivity : NovaActivity() {
          * from this blob.
          */
         fun launchOptimization(): JSONObject? {
+            // The worker response is an exact host-validated contract. Space choices
+            // go into the request; rewriting the response invalidates its provenance.
+            if (spaceGame != null) return optimizationState.rawOptimization
             val preferences = PreferenceConfiguration.readPreferences(this@NovaGameDetailActivity)
             return NovaLaunchStreamOverride.compose(
                 raw = optimizationState.rawOptimization,
@@ -531,6 +555,11 @@ class NovaGameDetailActivity : NovaActivity() {
                 fallbackFps = preferences.fps.toInt(),
             )
         }
+
+        fun spaceConstraint() = if (spaceGame != null) NovaSpaceUiState.constrainedRequest(
+            chosenResolution, chosenFps,
+            com.papi.nova.manager.WorkerLaunchContract.parse(optimizationState.rawOptimization),
+        ) else null
 
         fun refreshUiState(preference: String = profilePreference) {
             uiState = buildUiState(currentGame, preference)
@@ -548,6 +577,7 @@ class NovaGameDetailActivity : NovaActivity() {
         }
 
         fun selectedEncoderBackend(): String {
+            if (com.papi.nova.manager.WorkerLaunchContract.isProfileApp(currentGame.id)) return ""
             val selected = chosenEncoderBackend ?: return ""
             val settings = clientSettings ?: return ""
             return selected.takeIf { candidate ->
@@ -570,6 +600,9 @@ class NovaGameDetailActivity : NovaActivity() {
             resolvedMode: String,
             requestGeneration: Long,
         ): Boolean {
+            // Assigned profiles own their display. Their authenticated resolver
+            // supplies the launch contract without writing host display settings.
+            if (com.papi.nova.manager.WorkerLaunchContract.isProfileApp(currentGame.id)) return true
             val updated = withContext(Dispatchers.IO) {
                 syncLaunchPreflightSettings(
                     this@NovaGameDetailActivity,
@@ -694,6 +727,8 @@ class NovaGameDetailActivity : NovaActivity() {
         var retryPreflight: () -> Unit = {}
 
         fun launchConfirmed(mirrorDesktop: Boolean, forcePrivateAfterSteamClose: Boolean = false) {
+            if (spaceGame != null && spaceLaunchDelivered) return
+            if (spaceGame != null) spaceLaunchDelivered = true
             pendingLaunch = false
             onLaunch?.invoke(
                 currentGame.copy(mangohud = mangoHudEnabled),
@@ -728,8 +763,31 @@ class NovaGameDetailActivity : NovaActivity() {
          * its own answer was still judged by whatever the last preflight said. Both paths
          * come through here now, and the blob that decides is the blob that launches.
          */
+        fun playEnvironmentReady(): Boolean {
+            val space = currentGame.space ?: return true
+            val snapshot = environmentSnapshot ?: return false
+            return snapshot.selectedId == space.id && snapshot.selected?.state in setOf("ready", "running")
+        }
+
         fun attemptLaunch() {
-            if (!uiState.playEnabled) return
+            if (environmentChanging || environmentError != null || !playEnvironmentReady()) { pendingLaunch = false; return }
+            if (spaceGame != null) {
+                if (spaceLaunchDelivered) return
+                when (NovaSpaceUiState.availability(currentGame, activeSession)) {
+                    NovaSpaceUiState.Availability.IN_USE -> { pendingLaunch = false; return }
+                    NovaSpaceUiState.Availability.RESUMABLE -> {
+                        pendingLaunch = false
+                        spaceLaunchDelivered = true
+                        finishWithSessionRequest(RESULT_SESSION_RESUME)
+                        return
+                    }
+                    NovaSpaceUiState.Availability.AVAILABLE -> Unit
+                }
+            }
+            if (spaceConstraint() != null) {
+                pendingLaunch = false; destination = NovaGameDetailDestination.PLAY_SETUP; return
+            }
+            if (!uiState.playEnabled) { pendingLaunch = false; return }
             val optimization = launchOptimization()
             // Guarded on the RAW blob: a pick or an fps pin makes the composed blob
             // non-null even while the preflight that arms the desktop-Steam guard is
@@ -751,6 +809,10 @@ class NovaGameDetailActivity : NovaActivity() {
                 NovaLaunchPreflightGate.READY -> Unit
             }
             pendingLaunch = false
+            if (spaceConstraint() != null) {
+                destination = NovaGameDetailDestination.PLAY_SETUP
+                return
+            }
             val decision = NovaDesktopSteamLaunchDecision.from(uiState, optimization)
             when {
                 // A choice of where to run belongs in the destination that
@@ -817,13 +879,16 @@ class NovaGameDetailActivity : NovaActivity() {
                     val opt = withContext(Dispatchers.IO) {
                         val launchPrefs = PreferenceConfiguration.readPreferences(this@NovaGameDetailActivity)
                         val metered = StreamSyncManager.isMeteredNetwork(this@NovaGameDetailActivity)
+                        val spaceRequest = if (spaceGame != null) NovaSpaceUiState.request(
+                            chosenResolution, chosenFps, launchPrefs.width, launchPrefs.height, launchPrefs.fps,
+                        ) else null
                         apiClient.getOptimization(
                             deviceName, currentGame.id.ifBlank { currentGame.name }, preference,
                             mode = optimizationMode,
                             topologyLocked = true,
-                            width = launchPrefs.width,
-                            height = launchPrefs.height,
-                            fps = launchPrefs.fps,
+                            width = spaceRequest?.width ?: launchPrefs.width,
+                            height = spaceRequest?.height ?: launchPrefs.height,
+                            fps = spaceRequest?.fps ?: launchPrefs.fps,
                             bitrateKbps = if (metered) launchPrefs.meteredBitrate else launchPrefs.bitrate,
                             bitrateLocked = metered,
                             hdr = launchPrefs.enableHdr,
@@ -1031,6 +1096,7 @@ class NovaGameDetailActivity : NovaActivity() {
         fun chooseResolution(choice: NovaDisplayResolutionChoice) {
             chosenResolution = choice
             saveResolutionOverride(currentGame, choice.id)
+            if (spaceGame != null) loadOptimization(profilePreference)
         }
 
         /**
@@ -1045,6 +1111,7 @@ class NovaGameDetailActivity : NovaActivity() {
             } else {
                 clearFrameRateOverride(currentGame)
             }
+            if (spaceGame != null) loadOptimization(profilePreference)
         }
 
         /** Select a backend for this game only; null returns to Polaris' host setting. */
@@ -1118,10 +1185,92 @@ class NovaGameDetailActivity : NovaActivity() {
          * The act column, resolved. Rows appear only when the current host has a real choice
          * to offer; richer catalogs use the panel's measured scrolling fallback.
          */
+        fun loadPlayDestinations() {
+            val queryGame = currentGame
+            lifecycleScope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        val spaces = apiClient.getSpaces()
+                        val destinations = if (spaces == null || spaces.spaces.isEmpty()) emptyList() else buildList {
+                            val steamId = queryGame.steamAppid
+                            val steamLauncher = queryGame.space?.target == "big-picture-v1"
+                            if (spaces.desktopAllowed || queryGame.space == null) {
+                                val desktopGame = if (queryGame.space == null) queryGame else
+                                    runCatching { apiClient.getDesktopGames().firstOrNull {
+                                        steamId.isNotEmpty() && it.steamAppid == steamId
+                                    } }.getOrNull()
+                                add(NovaPlayDestination("desktop", "Desktop", desktopGame, "ready"))
+                            }
+                            for (space in spaces.spaces) {
+                                val title = if (space.id == queryGame.space?.id) queryGame else
+                                    if (steamId.isNotEmpty() || steamLauncher) runCatching {
+                                        apiClient.getSpaceLibrary(space.id).firstOrNull {
+                                            if (steamLauncher) it.space?.target == "big-picture-v1" else it.steamAppid == steamId
+                                        }
+                                    }.getOrNull() else null
+                                add(NovaPlayDestination(space.id, space.name, title, space.state))
+                            }
+                        }
+                        spaces to destinations
+                    }
+                    environmentSnapshot = result.first
+                    playDestinations = result.second
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { if (queryGame.space != null) environmentError = "Could Not Check Where To Play. Return To Library And Refresh." }
+            }
+        }
+
+        fun choosePlayDestination(choice: NovaPlayDestination) {
+            val snapshot = environmentSnapshot ?: return
+            val title = choice.game ?: return
+            if (choice.id == (currentGame.space?.id ?: "desktop") && environmentError == null) return
+            if (environmentChanging || !snapshot.canSwitch || choice.state !in setOf("ready", "running")) return
+            pendingLaunch = false; environmentChanging = true; environmentError = null
+            lifecycleScope.launch {
+                try {
+                    val selected = withContext(Dispatchers.IO) { apiClient.selectSpace(choice.id, snapshot.selectedId) }
+                    if (selected.selectedId != choice.id) throw IllegalStateException("Environment choice changed")
+                    if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@launch
+                    // A fresh Activity discards the previous game's settings and in-flight
+                    // preflight responses. Forward the launch result to the same Library.
+                    val next = Intent(intent).putExtra(EXTRA_GAME, PolarisGameJson.encode(title))
+                        .putExtra(EXTRA_PLAY_SETUP, true).addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT)
+                    next.removeExtra(EXTRA_OPEN_SPACE); next.removeExtra(EXTRA_SPACE_SETTINGS)
+                    startActivity(next)
+                    finish()
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) {
+                    environmentError = "The Choice Could Not Be Confirmed. Choose Where To Play Again."
+                    loadPlayDestinations()
+                } finally { environmentChanging = false }
+            }
+        }
+        loadPlayDestinations()
+
         fun buildPlaySetupRows(): List<NovaPlaySetupRowState> {
             val rows = mutableListOf<NovaPlaySetupRowState>()
+            if (playDestinations.isNotEmpty()) rows += NovaPlaySetupRowState(
+                row = NovaPlaySetupRow.PLAY_IN, label = "Change Space",
+                caption = environmentError ?: if (environmentChanging) "Changing Your Environment…" else
+                    "Choose whose games, Steam sign-in, and saves to use.",
+                value = currentGame.space?.name ?: "Desktop", stripTitle = "Where This Game Opens",
+                options = playDestinations.map { choice -> NovaPlaySetupOption(
+                    label = choice.name,
+                    consequence = when {
+                        choice.game == null -> "This title is not available here. Open this Space’s Steam library to install it."
+                        choice.state == "in_use" -> "Someone is playing in this Space."
+                        choice.id == "desktop" -> "Use this computer’s usual games and account."
+                        else -> "Use the Steam sign-in and saves in ${choice.name}."
+                    },
+                    current = choice.id == (currentGame.space?.id ?: "desktop"),
+                    enabled = !environmentChanging && environmentSnapshot?.canSwitch == true &&
+                        choice.game != null && choice.state in setOf("ready", "running"),
+                    onSelect = { choosePlayDestination(choice) },
+                ) },
+                enabled = !environmentChanging && environmentSnapshot?.canSwitch == true,
+            )
             val preferences = PreferenceConfiguration.readPreferences(this@NovaGameDetailActivity)
-            val fpsPin = NovaLaunchStreamOverride.highFpsPin(profilePreference, preferences.fps)
+            val fpsPin = if (spaceGame == null) NovaLaunchStreamOverride.highFpsPin(profilePreference, preferences.fps) else null
 
             val modeOptions = buildList {
                 if (uiState.headlessAllowed) {
@@ -1243,7 +1392,7 @@ class NovaGameDetailActivity : NovaActivity() {
             val encoderCatalog = clientSettings?.capabilities?.takeIf {
                 it.sessionEncoderOverride
             }?.encoders.orEmpty().filter { it.available }.distinctBy { it.value }
-            if (encoderCatalog.isNotEmpty()) {
+            if (encoderCatalog.isNotEmpty() && !com.papi.nova.manager.WorkerLaunchContract.isProfileApp(currentGame.id)) {
                 val selectedEncoder = selectedEncoderBackend()
                 val selectedOption = encoderCatalog.firstOrNull { it.value == selectedEncoder }
                 rows += NovaPlaySetupRowState(
@@ -1354,7 +1503,9 @@ class NovaGameDetailActivity : NovaActivity() {
                 )
             }
 
-            return rows
+            return if (spaceGame == null) rows else rows.filter {
+                it.row in setOf(NovaPlaySetupRow.PLAY_IN, NovaPlaySetupRow.RESOLUTION, NovaPlaySetupRow.FRAME_RATE)
+            }
         }
 
         /**
@@ -1446,15 +1597,45 @@ class NovaGameDetailActivity : NovaActivity() {
                         ?: launchPreferences.fps.toInt()).toDouble(),
                     clientAskedHdr = launchPreferences.enableHdr,
                 )
-                NovaGameDetailContent(
-                    uiState = uiState,
-                    launchIntro = buildLaunchIntro(uiState),
+                if (spaceGame != null && com.papi.nova.manager.WorkerLaunchContract.isLegacyProfileApp(currentGame.id)) {
+                    val constraint = spaceConstraint()
+                    NovaSpaceContent(
+                        game = currentGame,
+                        hostName = serverName,
+                        activeSession = activeSession,
+                        onOpen = { attemptLaunch() },
+                        onSettings = { pendingLaunch = false; destination = NovaGameDetailDestination.PLAY_SETUP },
+                        onBack = { if (!dismissActiveDetailDestination()) finish() },
+                        showSettings = destination == NovaGameDetailDestination.PLAY_SETUP,
+                        settingsRows = buildPlaySetupRows(),
+                        primaryEnabled = uiState.playEnabled && !pendingLaunch && !spaceLaunchDelivered && constraint == null,
+                        primaryLabel = getString(when {
+                            constraint != null -> R.string.nova_space_host_settings_required
+                            pendingLaunch -> R.string.nova_space_checking
+                            optimizationState.preflightFailed -> R.string.nova_space_retry
+                            optimizationState.reviewRequired && !reviewExpanded -> R.string.nova_space_review
+                            else -> R.string.nova_space_open
+                        }),
+                        message = when {
+                            constraint != null -> getString(R.string.nova_space_host_constraint,
+                                constraint.width, constraint.height, constraint.fps)
+                            reviewExpanded -> launchPreview.profileSummary?.noticeDetail
+                                ?.takeIf { it.isNotBlank() } ?: getString(R.string.nova_library_preflight_review_message, optimizationState.reviewReason)
+                            optimizationState.preflightFailed -> getString(R.string.nova_game_detail_launch_preflight_unavailable)
+                            !uiState.playEnabled -> uiState.hostStreamDisplayModeUnavailableReason.takeIf { it.isNotBlank() }
+                            else -> null
+                        },
+                    )
+                } else NovaGameDetailContent(
+                    uiState = uiState.copy(playEnabled = uiState.playEnabled && playEnvironmentReady() &&
+                        !environmentChanging && environmentError == null),
+                    launchIntro = environmentError ?: buildLaunchIntro(uiState),
                     recommendedBadge = getString(
                         R.string.nova_library_launch_recommended_mode_badge,
                         modeBadgeLabel(uiState.recommendedMode)
                     ),
                     lastPlayedText = lastPlayedText(currentGame),
-                    profilePreferenceLabel = getString(AutoQualityProfilePreferences.labelRes(profilePreference)),
+                    profilePreferenceLabel = currentGame.space?.let { "Playing In ${it.name}" } ?: getString(AutoQualityProfilePreferences.labelRes(profilePreference)),
                     resetProfileLabel = getString(
                         if (resetWorking) {
                             R.string.nova_library_reset_game_profile_working
@@ -1537,7 +1718,15 @@ class NovaGameDetailActivity : NovaActivity() {
                     },
                     onPickHostDefault = { pickHostDefault() },
                     onConfigureHostMode = { finishWithManageServerRequest() },
-                    playLabel = if (pendingLaunch) {
+                    playLabel = if (environmentChanging) {
+                        "Changing Environment…"
+                    } else if (environmentError != null) {
+                        "Refresh Library"
+                    } else if (!playEnvironmentReady()) {
+                        if (environmentSnapshot?.selected?.state == "in_use") "Space In Use" else "Checking Space…"
+                    } else if (spaceConstraint() != null) {
+                        "Check Stream Settings"
+                    } else if (pendingLaunch) {
                         // The press landed and is being held, so say so. A button that
                         // looks untouched for the length of an HTTP round-trip reads as
                         // one that did not register.
@@ -1546,6 +1735,8 @@ class NovaGameDetailActivity : NovaActivity() {
                         getString(R.string.nova_game_detail_launch_retry_host_check)
                     } else if (optimizationState.reviewRequired) {
                         getString(R.string.nova_library_review_and_launch)
+                    } else if (currentGame.space != null) {
+                        if (currentGame.space?.target == "big-picture-v1") "Open Steam Big Picture" else "Play"
                     } else {
                         // Describe the same composed choices attemptLaunch() will send.
                         launchPreview.profileSummary
@@ -1823,6 +2014,8 @@ class NovaGameDetailActivity : NovaActivity() {
             }
         )
 
+        pendingLaunch = directSpaceOpen
+        directSpaceOpen = false
         loadOptimization(profilePreference)
 
     }
@@ -1951,6 +2144,10 @@ class NovaGameDetailActivity : NovaActivity() {
      * resolution to offer, so it draws no row rather than an echo of the one above.
      */
     private fun resolutionPlanner(game: PolarisGame): NovaDisplayResolutionPlanner {
+        if (NovaSpaceUiState.isSpace(game)) {
+            val preferences = PreferenceConfiguration.readPreferences(this)
+            return NovaSpaceUiState.resolutionPlanner(preferences.width, preferences.height, preferences.fps)
+        }
         val fallbackMode = clientSettings?.desired?.displayMode
             ?.takeIf { it.isNotBlank() }
             ?: clientSettings?.effective?.displayMode
@@ -2390,6 +2587,10 @@ class NovaGameDetailActivity : NovaActivity() {
         const val EXTRA_SERVER_UUID = "nova.detail.serverUuid"
         const val EXTRA_GAME = "nova.detail.game"
         const val EXTRA_DEFAULT_VIRTUAL_DISPLAY = "nova.detail.defaultVirtualDisplay"
+        const val EXTRA_PLAY_SETUP = "nova.detail.playSetup"
+        const val EXTRA_OPEN_SPACE = "nova.detail.openSpace"
+        const val EXTRA_SPACE_SETTINGS = "nova.detail.spaceSettings"
+        const val EXTRA_RESULT_SPACE = "nova.detail.result.space"
         const val EXTRA_RESULT_LAUNCH = "nova.detail.result.launch"
         const val EXTRA_RESULT_LAUNCH_GAME = "nova.detail.result.launchGame"
         const val EXTRA_RESULT_SESSION = "nova.detail.result.session"

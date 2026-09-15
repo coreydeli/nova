@@ -21,6 +21,11 @@ data class AutoQualityUiState(
         @JvmStatic fun from(status: PolarisSessionStatus?, fallbackTargetFps: Double = 0.0): AutoQualityUiState {
             val policy = StreamPolicyUiState.from(status, fallbackTargetFps = fallbackTargetFps)
             val live = status?.liveTuning
+            if (status?.liveTuningUnavailable == true && live == null) {
+                return AutoQualityUiState(State.OFF, "Fixed bitrate for this Space", "Fixed bitrate",
+                    "This Space uses the bitrate selected when the stream starts",
+                    policy.targetSummary, Tone.MUTED, false)
+            }
             val unknown = status == null || (status.liveTuningPresent && live == null)
             if (unknown) return AutoQualityUiState(State.WATCHING, "Live Tuning: Unknown", "Tuning: Unknown",
                 "Waiting for the host to confirm the setting", policy.targetSummary, Tone.MUTED, false)

@@ -697,13 +697,16 @@ class ShortcutTrampoline : NovaActivity() {
 
         return try {
             val apiClient = PolarisApiClient(this, activeAddress.address, details.httpsPort, serverCert)
-            val mangoHudSynced = apiClient.setMangoHud(polarisGame.id, polarisGame.mangohud)
+            val isWorkerProfile = com.papi.nova.manager.WorkerLaunchContract.isProfileApp(polarisGame.id)
+            val mangoHudSynced = isWorkerProfile || apiClient.setMangoHud(polarisGame.id, polarisGame.mangohud)
             if (!mangoHudSynced) {
                 LimeLog.warning("Nova: Shortcut launch MangoHUD state sync failed; continuing launch")
             }
 
             val clientSettings = apiClient.getClientSettings()
-            val encoderBackend = if (clientSettings != null) {
+            val encoderBackend = if (isWorkerProfile) {
+                ""
+            } else if (clientSettings != null) {
                 NovaEncoderBackendOverrides.loadAvailable(this, polarisGame, clientSettings).orEmpty()
             } else {
                 // Preserve the explicit choice when settings could not be fetched. Game's
@@ -752,7 +755,7 @@ class ShortcutTrampoline : NovaActivity() {
             val launchFps = StreamSyncManager.resolveAutoSafeTargetFps(preferences.fps, composed)
             val launchBitrateKbps = StreamSyncManager.resolveAutoSafeBitrateKbps(requestedBitrateKbps, composed)
 
-            syncShortcutLaunchPreflightSettings(
+            if (!isWorkerProfile) syncShortcutLaunchPreflightSettings(
                 apiClient = apiClient,
                 clientSettings = clientSettings,
                 usesVirtualDisplay = launchUsesVirtualDisplay,
