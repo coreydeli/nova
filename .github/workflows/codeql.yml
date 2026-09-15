@@ -41,6 +41,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          # Install adb without requesting the removed legacy tools package.
+          packages: 'platform-tools'
 
       - name: Install NDK
         run: sdkmanager "ndk;27.0.12077973"
