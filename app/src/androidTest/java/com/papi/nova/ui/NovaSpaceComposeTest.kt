@@ -195,6 +195,31 @@ class NovaSpaceComposeTest {
         saveScreenshot("your-space.png")
     }
 
+    @Test fun desktopReadsAsTheComputerAndTheWholeRowOpensTheChooser() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "desktop", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "Alex", "ready", false, true)), desktopAllowed = true)
+        var choices = 0
+        compose.setContent { NovaComposeTheme {
+            NovaEnvironmentBar(snapshot, true, { choices++ }, modifier = Modifier.requiredSize(560.dp, 70.dp), compact = true)
+        } }
+        compose.onNodeWithText("This computer").assertIsDisplayed()
+        compose.onNodeWithText("Your Space").assertDoesNotExist()
+        compose.onNodeWithTag("nova-environment-choose").assertHasClickAction().performClick()
+        compose.runOnIdle { assertEquals(1, choices) }
+        saveScreenshot("space-control-desktop.png")
+    }
+
+    @Test fun oneEnvironmentIsPlainTextWithNothingToFocus() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "alex", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "Alex", "ready", true, true)))
+        compose.setContent { NovaComposeTheme {
+            NovaEnvironmentBar(snapshot, true, {}, modifier = Modifier.requiredSize(560.dp, 70.dp), compact = true)
+        } }
+        compose.onNodeWithText("Alex").assertIsDisplayed()
+        compose.onNodeWithTag("nova-environment-choose").assertDoesNotExist()
+        compose.onAllNodes(hasClickAction()).assertCountEquals(0)
+    }
+
     private fun saveScreenshot(name: String) {
         val image = compose.onRoot().captureToImage()
         val bitmap = image.asAndroidBitmap()

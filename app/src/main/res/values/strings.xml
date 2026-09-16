@@ -1724,6 +1724,7 @@
     <string name="nova_space_desktop_caption">This computer’s usual games and desktop.</string>
     <string name="nova_space_current">Current Space</string>
     <string name="nova_space_bar_your_space">Your Space</string>
+    <string name="nova_space_bar_desktop">This computer</string>
     <string name="nova_space_bar_spaces">Spaces</string>
     <string name="nova_space_bar_unavailable">Unavailable on the host</string>
     <string name="nova_space_bar_none">None assigned</string>

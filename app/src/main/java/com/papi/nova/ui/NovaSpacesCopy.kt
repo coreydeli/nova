@@ -5,6 +5,17 @@ import com.papi.nova.R
 import com.papi.nova.api.PolarisSpace
 import com.papi.nova.api.PolarisSpaces
 
+/** The Space control's words, as resources, so the rules are testable without Compose. */
+internal data class NovaEnvironmentLabel(
+    @StringRes val caption: Int,
+    /** A fixed name (Desktop, unavailable, none assigned), or null when [spaceName] is the name. */
+    @StringRes val nameRes: Int?,
+    val spaceName: String?,
+    @StringRes val status: Int?,
+    /** More than one place to play, so the control opens the chooser. */
+    val offersChoice: Boolean,
+)
+
 /**
  * One vocabulary for Spaces, keyed on the words the host sends, so the library, the chooser,
  * Play Setup and the host card describe the same Space with the same words.
@@ -35,6 +46,43 @@ internal object NovaSpacesCopy {
             "controller_missing" -> R.string.nova_space_unavailable_controller_missing
             else -> R.string.nova_space_unavailable_generic
         }
+    }
+
+    /**
+     * What the library's Space control shows, from the host's words only: a caption, the
+     * current name, an optional status and whether there is anything to choose.
+     *
+     * Desktop is not a Space, so its caption names the computer instead of calling it "Your
+     * Space". While a change is on the wire the caption says so in place of the usual word.
+     */
+    fun environmentLabel(snapshot: PolarisSpaces, statusKnown: Boolean = true, changing: Boolean = false): NovaEnvironmentLabel {
+        val unavailable = unavailableReason(snapshot)
+        val selected = snapshot.selected
+        val caption = when {
+            changing -> R.string.nova_space_changing
+            unavailable != null -> R.string.nova_space_bar_spaces
+            snapshot.desktopSelected -> R.string.nova_space_bar_desktop
+            else -> R.string.nova_space_bar_your_space
+        }
+        val nameRes = when {
+            unavailable != null -> R.string.nova_space_bar_unavailable
+            snapshot.desktopSelected -> R.string.nova_space_desktop
+            selected != null -> null
+            else -> R.string.nova_space_bar_none
+        }
+        val status = when {
+            changing || unavailable != null || selected == null -> null
+            !statusKnown -> R.string.nova_space_state_unknown
+            selected.state == "ready" -> null
+            else -> stateLabel(selected.state)
+        }
+        return NovaEnvironmentLabel(
+            caption = caption,
+            nameRes = nameRes,
+            spaceName = if (nameRes == null) selected?.name else null,
+            status = status,
+            offersChoice = snapshot.spaces.size + (if (snapshot.desktopAllowed) 1 else 0) > 1,
+        )
     }
 
     /** A device with nothing to stream: the host says so, or lists no Space and allows no Desktop. */

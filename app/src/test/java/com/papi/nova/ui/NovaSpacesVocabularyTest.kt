@@ -92,6 +92,27 @@ class NovaSpacesVocabularyTest {
     }
 
     @Test
+    fun theSpaceRowIsOneControlNotALabelBesideAFloatingButton() {
+        val bar = File("src/main/java/com/papi/nova/ui/NovaEnvironmentBar.kt").readText()
+        assertTrue(
+            "the whole Space row is the action that opens the chooser",
+            bar.contains("NovaActionSurface(") && bar.contains("onClick = onChoose"),
+        )
+        assertFalse(
+            "a Change Space button of its own sat at the far end of a fixed slot and floated in the middle of the landscape strip",
+            bar.contains("NovaActionButton("),
+        )
+        assertTrue("its words come from the shared rules, not from the composable", bar.contains("NovaSpacesCopy.environmentLabel("))
+        val stage = File("src/main/java/com/papi/nova/ui/NovaLibraryStage.kt").readText()
+        val strip = stage.substring(
+            stage.indexOf("internal fun NovaLibraryLandscapeShowcaseStripContent("),
+            stage.indexOf("private fun NovaLibraryToolbarIdentity("),
+        )
+        assertFalse("a fixed 300 dp slot is what pushed the button into the middle", strip.contains("width(300.dp"))
+        assertTrue("the control sizes to its content and a long name ellipsizes", strip.contains("widthIn(max = 280.dp"))
+    }
+
+    @Test
     fun theChooserIsBuiltFromTheDetailWindowRows() {
         val chooser = File("src/main/java/com/papi/nova/ui/NovaSpaceChooser.kt").readText()
         assertTrue(chooser.contains("NovaSteamChoiceRow(") && chooser.contains("NovaControllerHintBar("))

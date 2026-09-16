@@ -266,6 +266,7 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
     environments: PolarisSpaces? = null,
     environmentEnabled: Boolean = true,
     environmentStatusKnown: Boolean = true,
+    environmentChanging: Boolean = false,
     onChooseEnvironment: () -> Unit = {},
 ) {
     val surfaces = LocalNovaLibrarySurfaces.current
@@ -309,13 +310,16 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
         )
         if (environments != null) {
             // Beside the host identity, not instead of it: which PC this is still matters
-            // when more than one is paired.
+            // when more than one is paired. One control sized to its content and capped so a
+            // long name ellipsizes: a fixed 300 dp slot pushed its old Change Space button to
+            // the middle of the strip, away from the name it changes.
             NovaEnvironmentBar(
                 spaces = environments,
                 enabled = environmentEnabled,
                 statusKnown = environmentStatusKnown,
+                changing = environmentChanging,
                 onChoose = onChooseEnvironment,
-                modifier = Modifier.width(300.dp * fontScale),
+                modifier = Modifier.widthIn(max = 280.dp * fontScale),
                 compact = true,
             )
         }

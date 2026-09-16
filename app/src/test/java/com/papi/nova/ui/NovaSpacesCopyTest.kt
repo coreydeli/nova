@@ -4,7 +4,9 @@ import com.papi.nova.R
 import com.papi.nova.api.PolarisSpace
 import com.papi.nova.api.PolarisSpaces
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NovaSpacesCopyTest {
@@ -86,5 +88,56 @@ class NovaSpacesCopyTest {
             NovaSpacesCopy.EmptyLibraryCase.HOST_UNAVAILABLE,
             NovaSpacesCopy.emptyLibraryCase(snapshot(available = false, canSwitch = false, unavailableReason = "admin_failed")),
         )
+    }
+
+    @Test
+    fun theSpaceControlNamesDesktopAsTheComputerAndNeverAsASpace() {
+        val desktop = NovaSpacesCopy.environmentLabel(
+            snapshot(spaces = listOf(PolarisSpace("a", "papi - steam", "ready", false)), desktopAllowed = true),
+        )
+        assertEquals(R.string.nova_space_bar_desktop, desktop.caption)
+        assertEquals(R.string.nova_space_desktop, desktop.nameRes)
+        assertNull(desktop.spaceName)
+        assertNull(desktop.status)
+        assertTrue("one Space and Desktop are two places to play", desktop.offersChoice)
+
+        val space = NovaSpacesCopy.environmentLabel(
+            snapshot(spaces = listOf(PolarisSpace("a", "papi - steam", "starting", true)), desktopAllowed = true),
+        )
+        assertEquals(R.string.nova_space_bar_your_space, space.caption)
+        assertNull(space.nameRes)
+        assertEquals("papi - steam", space.spaceName)
+        assertEquals(R.string.nova_space_state_starting, space.status)
+
+        assertEquals(
+            "a failed check shows no stale state word",
+            R.string.nova_space_state_unknown,
+            NovaSpacesCopy.environmentLabel(snapshot(), statusKnown = false).status,
+        )
+        assertFalse(
+            "one Space without Desktop has nothing to choose, so the control is plain text",
+            NovaSpacesCopy.environmentLabel(snapshot()).offersChoice,
+        )
+    }
+
+    @Test
+    fun theSpaceControlSaysAChangeIsUnderwayAndAnUnavailableHostInItsOwnWords() {
+        val changing = NovaSpacesCopy.environmentLabel(snapshot(desktopAllowed = true), changing = true)
+        assertEquals(R.string.nova_space_changing, changing.caption)
+        assertEquals("the current name stays until the host answers", "Alex", changing.spaceName)
+        assertNull(changing.status)
+
+        val unavailable = NovaSpacesCopy.environmentLabel(
+            snapshot(available = false, canSwitch = false, unavailableReason = "admin_failed", desktopAllowed = true),
+        )
+        assertEquals(R.string.nova_space_bar_spaces, unavailable.caption)
+        assertEquals(R.string.nova_space_bar_unavailable, unavailable.nameRes)
+        assertNull("an unavailable host is never read as Desktop", unavailable.spaceName)
+
+        val none = NovaSpacesCopy.environmentLabel(
+            PolarisSpaces(true, true, true, "", listOf(PolarisSpace("a", "Alex", "ready", false))),
+        )
+        assertEquals(R.string.nova_space_bar_your_space, none.caption)
+        assertEquals(R.string.nova_space_bar_none, none.nameRes)
     }
 }
