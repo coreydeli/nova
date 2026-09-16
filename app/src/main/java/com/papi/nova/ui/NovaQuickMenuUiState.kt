@@ -451,7 +451,8 @@ data class NovaQuickMenuUiState(
                 healthTone = healthTone,
                 disconnectAction = NovaQuickMenuAction(
                     id = NovaQuickMenuActionId.DISCONNECT,
-                    label = if (spaceSession) "Leave Space" else context.getString(R.string.game_menu_disconnect),
+                    label = if (spaceSession) context.getString(R.string.nova_space_leave_action) else context.getString(R.string.game_menu_disconnect),
+                    caption = if (spaceSession) context.getString(R.string.nova_space_leave_caption) else "",
                     destructive = spaceSession,
                 ),
                 endAction = NovaQuickMenuAction(

@@ -265,6 +265,7 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
     continueSlot: (@Composable RowScope.() -> Unit)? = null,
     environments: PolarisSpaces? = null,
     environmentEnabled: Boolean = true,
+    environmentStatusKnown: Boolean = true,
     onChooseEnvironment: () -> Unit = {},
 ) {
     val surfaces = LocalNovaLibrarySurfaces.current
@@ -274,7 +275,8 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
     // Keep one row even on narrow screens or with enlarged text. Controller
     // focus scrolls the row so every action keeps its full touch target.
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
-    val rowWidth = maxOf(maxWidth, (if (continueSlot != null) 800.dp else 520.dp) * fontScale)
+    // Identity, the Space bar, the count and two buttons; the continue slot when there is one.
+    val rowWidth = maxOf(maxWidth, (if (continueSlot != null) 980.dp else 700.dp) * fontScale)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -308,6 +310,18 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
                 }
             },
         )
+        if (environments != null) {
+            // Beside the host identity, not instead of it: which PC this is still matters
+            // when more than one is paired.
+            NovaEnvironmentBar(
+                spaces = environments,
+                enabled = environmentEnabled,
+                statusKnown = environmentStatusKnown,
+                onChoose = onChooseEnvironment,
+                modifier = Modifier.width(300.dp * fontScale),
+                compact = true,
+            )
+        }
         if (continueSlot != null) {
             continueSlot()
         } else {

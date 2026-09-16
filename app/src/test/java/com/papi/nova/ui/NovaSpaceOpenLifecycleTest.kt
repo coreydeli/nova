@@ -106,7 +106,7 @@ class NovaSpaceOpenLifecycleTest {
             entered.countDown()
             check(release.await(5, TimeUnit.SECONDS))
             snapshot("Late Response")
-        }
+        }.thenReturn(initial) // the chooser refreshes at once when it opens; that answer is the snapshot already shown
         val activity = activity(api)
         try {
             open(activity)

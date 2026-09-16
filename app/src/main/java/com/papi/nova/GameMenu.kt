@@ -373,7 +373,7 @@ class GameMenu @JvmOverloads constructor(
         val options = ArrayList<MenuOption>()
 
         if (game.isSpaceSession()) {
-            options.add(MenuOption("Leave Space", Runnable { game.quit() }))
+            options.add(MenuOption(getString(R.string.nova_space_leave_action), Runnable { game.quit() }))
         } else {
             options.add(MenuOption(getString(R.string.game_menu_disconnect), Runnable { game.disconnect() }))
             options.add(MenuOption(getString(R.string.game_menu_quit_session), Runnable { game.quit() }))

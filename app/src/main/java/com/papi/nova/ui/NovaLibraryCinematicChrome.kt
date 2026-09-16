@@ -67,8 +67,14 @@ internal fun NovaLibraryCinematicBackdrop(
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
     val backdropTarget = game?.let { game ->
+        // Big Picture's bundled Steam mark is not artwork; stretched full-bleed it was a grey
+        // smear behind the stage. The ambient field stands in for it.
+        if (game.space?.target == "big-picture-v1") return@let null
+        // A hero is asked for only when the host lists one for this game: cached for a
+        // desktop title, listed at all for a Space title (its route resolves on the host).
+        // Every Space game used to ask for one and take the miss.
         val hasCachedHero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO)?.cached == true ||
-            (game.space != null && game.space?.target != "big-picture-v1")
+            (game.space != null && game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO) != null)
         val artworkKind = if (hasCachedHero) PolarisGame.ARTWORK_KIND_HERO else PolarisGame.ARTWORK_KIND_POSTER
         NovaLibraryCinematicBackdropTarget(
             game = game,

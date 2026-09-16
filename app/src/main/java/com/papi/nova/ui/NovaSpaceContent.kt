@@ -29,6 +29,7 @@ import com.papi.nova.shared.polaris.model.PolarisGame
 import com.papi.nova.ui.compose.LocalNovaComposeColors
 import com.papi.nova.ui.compose.NOVA_FIRST_FOCUS_SETTLE_MS
 import com.papi.nova.ui.compose.NovaActionButton
+import com.papi.nova.ui.compose.NovaBadge
 import kotlinx.coroutines.delay
 
 /** The same Space identity stays visible through opening and stream settings. */
@@ -53,6 +54,8 @@ internal fun NovaSpaceContent(
     onChoose: (() -> Unit)? = null,
     displayName: String? = null,
     spaceState: String? = null,
+    /** Present while an open check is on the wire: the person can stop waiting for the host. */
+    onCancel: (() -> Unit)? = null,
 ) {
     val colors = LocalNovaComposeColors.current
     val inputModeManager = LocalInputModeManager.current
@@ -115,8 +118,15 @@ internal fun NovaSpaceContent(
                 stringResource(if (showSettings) R.string.nova_space_settings_description else R.string.nova_space_description),
                 color = colors.textSecondary, fontSize = 16.sp,
             )
-            if (!showSettings && spaceState != null) Text(spaceStateLabel(spaceState), color = colors.accent,
-                fontSize = 16.sp, modifier = Modifier.testTag("nova-space-status"))
+            if (!showSettings && spaceState != null) {
+                // The state is a chip, in the same word the chooser and the console use for it.
+                NovaBadge(
+                    text = stringResource(NovaSpacesCopy.stateLabel(spaceState)),
+                    color = if (spaceState == "ready" || spaceState == "running") colors.accent else colors.textSecondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.testTag("nova-space-status"),
+                )
+            }
             if (inUse) {
                 Text(stringResource(R.string.nova_space_in_use), color = colors.textPrimary, fontSize = 16.sp)
             }
@@ -133,8 +143,7 @@ internal fun NovaSpaceContent(
                 BoxWithConstraints {
                     val rowContent: @Composable (NovaPlaySetupRowState, Modifier) -> Unit = { row, rowModifier ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = rowModifier) {
-                        Text(if (row.row == NovaPlaySetupRow.TUNING) stringResource(R.string.nova_space_streaming_preset) else row.label,
-                            color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text(row.label, color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         Text(row.caption, color = colors.textSecondary, fontSize = 14.sp)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             row.options.forEach { option ->
@@ -161,8 +170,8 @@ internal fun NovaSpaceContent(
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     NovaActionButton(
+                        // A Space in use keeps its verb; the chip and the sentence above say why it waits.
                         text = when {
-                            inUse -> stringResource(R.string.nova_space_in_use_short)
                             availability == NovaSpaceUiState.Availability.RESUMABLE -> stringResource(R.string.nova_space_resume)
                             else -> primaryLabel ?: stringResource(R.string.nova_space_open)
                         },
@@ -170,13 +179,17 @@ internal fun NovaSpaceContent(
                         modifier = Modifier.focusRequester(primaryFocus)
                             .onFocusChanged { if (it.isFocused) lastAction = "open" }.testTag("nova-space-primary"),
                     )
+                    onCancel?.let { cancel ->
+                        NovaActionButton(text = stringResource(R.string.nova_space_cancel_check), onClick = cancel, minHeight = 52.dp,
+                            modifier = Modifier.testTag("nova-space-cancel"))
+                    }
                     NovaActionButton(
                         text = stringResource(R.string.nova_space_stream_settings), onClick = { lastAction = "settings"; onSettings() }, minHeight = 52.dp,
                         modifier = Modifier.focusRequester(settingsFocus)
                             .onFocusChanged { if (it.isFocused && primaryEnabled) lastAction = "settings" }.testTag("nova-space-settings"),
                     )
                     onChoose?.let { action ->
-                        NovaActionButton(text = "Choose Space", onClick = action, minHeight = 52.dp,
+                        NovaActionButton(text = stringResource(R.string.nova_space_change), onClick = action, minHeight = 52.dp,
                             modifier = Modifier.focusRequester(chooseFocus).onFocusChanged { if (it.isFocused) lastAction = "choose" }
                                 .testTag("nova-space-choose"))
                     }

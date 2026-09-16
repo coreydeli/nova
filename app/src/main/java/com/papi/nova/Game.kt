@@ -5481,14 +5481,14 @@ gravity = Gravity.CENTER_HORIZONTAL
 bottomMargin = dp(14)
 })
 val title = TextView(this@Game).apply {
-text = if (spaceSession) "Space Could Not Start" else getString(R.string.nova_launch_issue_title)
+text = if (spaceSession) getString(R.string.nova_space_launch_issue_title) else getString(R.string.nova_launch_issue_title)
 setTextColor(NovaThemeManager.getTextPrimaryColor(this@Game))
 textSize = 20f
 }
 container.addView(title)
 val body = TextView(this@Game).apply {
 text = if (spaceSession) listOfNotNull(conn?.lastHostRefusal?.message,
-    conn?.lastHostRefusal?.action ?: "Return to Library and try again. If this continues, open Spaces in Polaris and check Host Setup.")
+    conn?.lastHostRefusal?.action ?: getString(R.string.nova_space_launch_issue_default))
     .joinToString("\n\n") else message
 setTextColor(NovaThemeManager.getTextSecondaryColor(this@Game))
 textSize = 14f
@@ -5498,32 +5498,40 @@ val scroll = ScrollView(this@Game).apply {
 addView(body)
 }
 container.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+ // Every action wears the sheet chrome; a stock Button read as a stranger here.
+fun sheetAction(label: String, onClick: () -> Unit): TextView = TextView(this@Game).apply {
+text = label
+gravity = Gravity.CENTER
+NovaSheetChrome.styleSheetAction(this)
+setOnClickListener { onClick() }
+}
+fun addAction(action: TextView) {
+container.addView(action, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
+}
 if (spaceSession) {
 val explanation = body.text
 var detailsVisible = false
-val details = Button(this@Game).apply {
-text = "View Details"
-isAllCaps = false
-setOnClickListener {
+val details = sheetAction(getString(R.string.nova_space_launch_issue_details)) {}
+details.setOnClickListener {
 detailsVisible = !detailsVisible
 body.text = if (detailsVisible) "$explanation\n\n$message" else explanation
-text = if (detailsVisible) "Hide Details" else "View Details"
+details.text = getString(if (detailsVisible) R.string.nova_space_launch_issue_hide_details else R.string.nova_space_launch_issue_details)
 }
-}
-container.addView(details, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-}
-val dismiss = Button(this@Game).apply {
-text = if (spaceSession) "Back To Library" else getString(R.string.nova_launch_issue_dismiss)
-isAllCaps = false
-setTextColor(NovaThemeManager.getTextPrimaryColor(this@Game))
-background = NovaSheetChrome.createActionBackground(this@Game)
-setOnClickListener {
+addAction(details)
+ // Try Again hands the retry to the library, which re-checks the Space before it starts anything.
+addAction(sheetAction(getString(R.string.nova_space_launch_issue_retry)) {
+NovaSpaceRetrySignal.mark(this@Game, this@Game.getIntent().getStringExtra(EXTRA_PC_UUID), host ?: this@Game.getIntent().getStringExtra(EXTRA_HOST))
 sheet.dismiss()
 finish()
+})
 }
-}
-container.addView(dismiss, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+addAction(sheetAction(if (spaceSession) getString(R.string.nova_space_launch_issue_back) else getString(R.string.nova_launch_issue_dismiss)) {
+sheet.dismiss()
+finish()
+})
 sheet.setContentView(container)
+ // A tap beside the sheet is not a decision to leave the failure behind; Back and the actions are.
+sheet.setCanceledOnTouchOutside(false)
 sheet.setOnShowListener { NovaSheetChrome.applyBottomSheetChrome(sheet, container) }
 sheet.setOnDismissListener { finish() }
 sheet.show()
@@ -7103,14 +7111,14 @@ sheet.window?.attributes?.token = companionPresentation.companionDialogWindowTok
 val container = NovaSheetChrome.createSheetContainer(context)
 
 val title = TextView(context).apply {
-if (spaceSession) text = "Leave Space?" else setText(R.string.game_dialog_title_quit_confirm)
+if (spaceSession) setText(R.string.nova_space_leave_title) else setText(R.string.game_dialog_title_quit_confirm)
 textSize = 20f
 NovaSheetChrome.styleSheetTitle(this)
 }
 container.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
 val message = TextView(context).apply {
-if (spaceSession) text = "Leaving ends this Space’s game session. Save in your game first. Installed games, saved progress, and your Steam sign-in stay in this Space. Other Spaces keep running."
+if (spaceSession) setText(R.string.nova_space_leave_message)
 else setText(R.string.game_dialog_message_quit_confirm)
 textSize = 15f
 setPadding(0, UiHelper.dpToPx(context, 10f).toInt(), 0, UiHelper.dpToPx(context, 18f).toInt())
@@ -7127,7 +7135,7 @@ setOnClickListener { sheet.dismiss() }
 container.addView(stay, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiHelper.dpToPx(context, 48f).toInt()))
 
 val endSession = TextView(context).apply {
-text = if (spaceSession) "Leave Space" else getString(R.string.game_dialog_action_end_session)
+text = if (spaceSession) getString(R.string.nova_space_leave_action) else getString(R.string.game_dialog_action_end_session)
 gravity = Gravity.CENTER
 NovaSheetChrome.styleSheetAction(this, destructive = true)
 setOnClickListener {
