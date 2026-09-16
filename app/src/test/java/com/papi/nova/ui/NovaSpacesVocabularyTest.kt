@@ -75,6 +75,22 @@ class NovaSpacesVocabularyTest {
     }
 
     @Test
+    fun landscapeStripShowsTheSpaceRowOnceBesideTheHost() {
+        val stage = File("src/main/java/com/papi/nova/ui/NovaLibraryStage.kt").readText()
+        val strip = stage.substring(
+            stage.indexOf("internal fun NovaLibraryLandscapeShowcaseStripContent("),
+            stage.indexOf("private fun NovaLibraryToolbarIdentity("),
+        )
+        assertEquals(
+            "one Space row in the strip; a rerun of a patch once left two and no host name",
+            1,
+            Regex("NovaEnvironmentBar\\(").findAll(strip).count(),
+        )
+        assertFalse("the host identity is not the else branch of the Space row", strip.contains("} else NovaLibraryToolbarIdentity("))
+        assertTrue("host first, then the Space row", strip.indexOf("NovaLibraryToolbarIdentity(") < strip.indexOf("NovaEnvironmentBar("))
+    }
+
+    @Test
     fun theChooserIsBuiltFromTheDetailWindowRows() {
         val chooser = File("src/main/java/com/papi/nova/ui/NovaSpaceChooser.kt").readText()
         assertTrue(chooser.contains("NovaSteamChoiceRow(") && chooser.contains("NovaControllerHintBar("))

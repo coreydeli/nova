@@ -290,10 +290,7 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (environments != null) {
-            NovaEnvironmentBar(environments, environmentEnabled, onChooseEnvironment,
-                modifier = Modifier.width(300.dp * fontScale), compact = true)
-        } else NovaLibraryToolbarIdentity(
+        NovaLibraryToolbarIdentity(
             hostLabel = hostLabel,
             cinematic = true,
             modifier = Modifier.widthIn(min = 104.dp, max = 168.dp),
