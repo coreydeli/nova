@@ -1,0 +1,7 @@
+Nova 1.4.8
+
+Browse your Space with game posters and Steam Big Picture. Space selection and library controls now share one row.
+
+Choose 144, 165 or 240 FPS on supported setups. Match controller buttons by label or position for each game. Get clearer launch errors and HDR guidance.
+
+Spaces is an early preview for configured Polaris hosts. Its public Docker runtime download is not available yet. Handheld audio remains under investigation.
