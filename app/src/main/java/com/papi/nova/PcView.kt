@@ -2563,6 +2563,8 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
         intent.putExtra(NovaLibraryActivity.EXTRA_HTTPS_PORT, computer.httpsPort)
         intent.putExtra(NovaLibraryActivity.EXTRA_UNIQUE_ID, binder.uniqueId)
         intent.putExtra(NovaLibraryActivity.EXTRA_PC_UUID, computer.uuid)
+        // The card already knows whether this device has Spaces here; the library polls only when it does.
+        intent.putExtra(NovaLibraryActivity.EXTRA_SPACES_AVAILABLE, computer.spacesAvailable)
         val serverCommands = computer.serverCommands
         if (serverCommands != null) {
             intent.putStringArrayListExtra(

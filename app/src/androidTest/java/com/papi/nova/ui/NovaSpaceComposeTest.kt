@@ -128,24 +128,24 @@ class NovaSpaceComposeTest {
             com.papi.nova.api.PolarisSpace("a", "Alex", "ready", true),
             com.papi.nova.api.PolarisSpace("b", "Sam", "in_use", false)))
         var choice = ""
-        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, { choice = it }, {}) } }
+        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, busy = false, statusKnown = true, error = null, onChoose = { choice = it }, onBack = {}) } }
         awaitFocus("nova-space-choice-a")
         compose.onNodeWithTag("nova-space-choice-a").performKeyInput { pressKey(Key.DirectionDown) }
         awaitFocus("nova-space-choice-b")
         compose.onNodeWithTag("nova-space-choice-b").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle { assertEquals("b", choice) }
         compose.onNodeWithText("Open Space").assertDoesNotExist()
-        compose.onNodeWithText("In Use").assertIsDisplayed()
+        compose.onNodeWithText("In use").assertIsDisplayed()
     }
 
     @Test fun activeStreamLocksChoicesAndKeepsBackFocused() {
         val snapshot = com.papi.nova.api.PolarisSpaces(true, true, false, "a", listOf(
             com.papi.nova.api.PolarisSpace("a", "Alex", "stopping", true),
             com.papi.nova.api.PolarisSpace("b", "Sam", "ready", false)))
-        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, {}, {}) } }
+        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, busy = false, statusKnown = true, error = null, onChoose = {}, onBack = {}) } }
         awaitFocus("nova-space-chooser-back")
         compose.onNodeWithTag("nova-space-choice-b").assertIsNotEnabled()
-        compose.onNodeWithText("Save your game and end your stream before switching Spaces.").assertIsDisplayed()
+        compose.onNodeWithText("Spaces cannot be changed right now.").assertIsDisplayed()
     }
 
     @Test fun busySpaceKeepsChooserReachableAndCannotOpen() {
@@ -170,7 +170,7 @@ class NovaSpaceComposeTest {
             com.papi.nova.api.PolarisSpace("alex", "Alex’s Space", "ready", false, true),
             com.papi.nova.api.PolarisSpace("sam", "Sam’s Space", "ready", false, true)), desktopAllowed = true)
         var choice = ""
-        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, false, null, { choice = it }, {}) } }
+        compose.setContent { NovaComposeTheme { NovaSpaceChooser(snapshot, busy = false, statusKnown = true, error = null, onChoose = { choice = it }, onBack = {}) } }
         awaitFocus("nova-space-choice-desktop")
         compose.onNodeWithText("Change Space").assertIsDisplayed()
         compose.onNodeWithTag("nova-space-choice-desktop").performKeyInput { pressKey(Key.DirectionDown) }
@@ -189,10 +189,10 @@ class NovaSpaceComposeTest {
                 NovaEnvironmentBar(snapshot, true, { choices++ }, modifier = Modifier.requiredSize(560.dp, 70.dp))
             }
         } }
-        compose.onNodeWithText("Playing In").assertIsDisplayed()
+        compose.onNodeWithText("Your Space").assertIsDisplayed()
         compose.onNodeWithTag("nova-environment-choose").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, choices) }
-        saveScreenshot("playing-in.png")
+        saveScreenshot("your-space.png")
     }
 
     private fun saveScreenshot(name: String) {

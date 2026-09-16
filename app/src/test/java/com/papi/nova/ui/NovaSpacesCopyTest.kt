@@ -1,0 +1,90 @@
+package com.papi.nova.ui
+
+import com.papi.nova.R
+import com.papi.nova.api.PolarisSpace
+import com.papi.nova.api.PolarisSpaces
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class NovaSpacesCopyTest {
+    private fun snapshot(
+        enabled: Boolean = true,
+        available: Boolean = true,
+        canSwitch: Boolean = true,
+        unavailableReason: String? = null,
+        switchBlockedReason: String? = null,
+        spaces: List<PolarisSpace> = listOf(PolarisSpace("a", "Alex", "ready", true)),
+        desktopAllowed: Boolean = false,
+    ) = PolarisSpaces(
+        enabled, available, canSwitch,
+        selectedId = if (available) spaces.firstOrNull { it.selected }?.id ?: "desktop" else "",
+        spaces = spaces, desktopAllowed = desktopAllowed,
+        unavailableReason = unavailableReason, switchBlockedReason = switchBlockedReason,
+    )
+
+    @Test
+    fun reasonsComeFromTheHostAndUnknownOnesGetOneHonestSentence() {
+        assertNull(NovaSpacesCopy.unavailableReason(snapshot()))
+        assertEquals(
+            R.string.nova_space_unavailable_controller_missing,
+            NovaSpacesCopy.unavailableReason(snapshot(available = false, canSwitch = false, unavailableReason = "controller_missing", spaces = emptyList())),
+        )
+        assertEquals(
+            "a reason this client has never heard of must not become a crash or a blank",
+            R.string.nova_space_unavailable_generic,
+            NovaSpacesCopy.unavailableReason(snapshot(available = false, canSwitch = false, unavailableReason = "something_new", spaces = emptyList())),
+        )
+        assertNull(NovaSpacesCopy.switchBlockedReason(snapshot()))
+        assertEquals(R.string.nova_space_switch_blocked_your_stream, NovaSpacesCopy.switchBlockedReason(snapshot(canSwitch = false, switchBlockedReason = "your_stream")))
+        assertEquals(R.string.nova_space_switch_blocked_generic, NovaSpacesCopy.switchBlockedReason(snapshot(canSwitch = false)))
+        assertEquals(
+            "an unavailable host explains the switch with its own reason",
+            R.string.nova_space_unavailable_stopping,
+            NovaSpacesCopy.switchBlockedReason(snapshot(available = false, canSwitch = false, unavailableReason = "stopping", spaces = emptyList())),
+        )
+    }
+
+    @Test
+    fun aSpaceIsOpenableWhenTheHostSaysSoOrItAlreadyRunsForUs() {
+        assertNull(NovaSpacesCopy.openBlockedReason(PolarisSpace("a", "Alex", "ready", true)))
+        assertNull(NovaSpacesCopy.openBlockedReason(PolarisSpace("a", "Alex", "running", true, canOpen = false, blockedReason = "running")))
+        assertEquals(R.string.nova_space_blocked_at_capacity, NovaSpacesCopy.openBlockedReason(PolarisSpace("a", "Alex", "ready", true, canOpen = false, blockedReason = "at_capacity")))
+        assertEquals(R.string.nova_space_blocked_starting, NovaSpacesCopy.openBlockedReason(PolarisSpace("a", "Alex", "starting", true)))
+        assertEquals(R.string.nova_space_in_use, NovaSpacesCopy.openBlockedReason(PolarisSpace("a", "Alex", "in_use", false)))
+        assertEquals(R.string.nova_space_play_blocked_at_capacity, NovaSpacesCopy.playBlockedLabel("ready", "at_capacity"))
+        assertEquals(R.string.nova_space_play_blocked_in_use, NovaSpacesCopy.playBlockedLabel("in_use", null))
+    }
+
+    @Test
+    fun oneWordPerWireState() {
+        assertEquals(R.string.nova_space_state_ready, NovaSpacesCopy.stateLabel("ready"))
+        assertEquals(R.string.nova_space_state_starting, NovaSpacesCopy.stateLabel("starting"))
+        assertEquals(R.string.nova_space_state_running, NovaSpacesCopy.stateLabel("running"))
+        assertEquals(R.string.nova_space_state_stopping, NovaSpacesCopy.stateLabel("stopping"))
+        assertEquals(R.string.nova_space_state_in_use, NovaSpacesCopy.stateLabel("in_use"))
+        assertEquals(R.string.nova_space_state_unavailable, NovaSpacesCopy.stateLabel("unavailable"))
+        assertEquals(R.string.nova_space_state_unknown, NovaSpacesCopy.stateLabel(null))
+        assertEquals(R.string.nova_space_state_unknown, NovaSpacesCopy.stateLabel("at_capacity"))
+    }
+
+    @Test
+    fun anEmptyLibraryIsExplainedBySpacesOnlyWhenSpacesAreTheReason() {
+        assertNull(NovaSpacesCopy.emptyLibraryCase(snapshot()))
+        assertNull(NovaSpacesCopy.emptyLibraryCase(snapshot(enabled = false, available = false, canSwitch = false, spaces = emptyList())))
+        assertEquals(
+            NovaSpacesCopy.EmptyLibraryCase.NO_SPACE_ASSIGNED,
+            NovaSpacesCopy.emptyLibraryCase(snapshot(available = false, canSwitch = false, unavailableReason = "no_space_assigned", spaces = emptyList())),
+        )
+        assertEquals(
+            "a host from before the reason fields lists nothing and allows no Desktop",
+            NovaSpacesCopy.EmptyLibraryCase.NO_SPACE_ASSIGNED,
+            NovaSpacesCopy.emptyLibraryCase(snapshot(available = false, canSwitch = false, spaces = emptyList())),
+        )
+        assertNull("a Desktop-only device has an ordinary library", NovaSpacesCopy.emptyLibraryCase(snapshot(spaces = emptyList(), desktopAllowed = true)))
+        assertEquals(
+            NovaSpacesCopy.EmptyLibraryCase.HOST_UNAVAILABLE,
+            NovaSpacesCopy.emptyLibraryCase(snapshot(available = false, canSwitch = false, unavailableReason = "admin_failed")),
+        )
+    }
+}

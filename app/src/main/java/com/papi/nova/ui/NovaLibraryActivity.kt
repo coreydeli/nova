@@ -130,8 +130,10 @@ import androidx.preference.PreferenceManager
 import com.papi.nova.LimeLog
 import com.papi.nova.Game
 import com.papi.nova.NovaSessionEndSignal
+import com.papi.nova.NovaSpaceRetrySignal
 import com.papi.nova.R
 import com.papi.nova.api.PolarisApiClient
+import com.papi.nova.api.PolarisApiRejectedException
 import com.papi.nova.api.PolarisGameJson
 import com.papi.nova.ui.compose.NOVA_FIRST_FOCUS_SETTLE_MS
 import com.papi.nova.ui.compose.NovaBadge
@@ -164,6 +166,12 @@ import com.papi.nova.ui.compose.NovaFocusMotionSpec
 import com.papi.nova.ui.compose.NovaMenuBackdropBlur
 import com.papi.nova.ui.compose.novaFocusMotion
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -189,6 +197,7 @@ class NovaLibraryActivity : NovaActivity() {
     private var streamPcName: String = ""
     private var streamServerCommands: ArrayList<String>? = null
     private var streamServerCert: ByteArray? = null
+    private var spacesExpected: Boolean = false
     private val gameDetailLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
     ) { result -> onGameDetailResult(result) }
@@ -217,6 +226,9 @@ class NovaLibraryActivity : NovaActivity() {
     private var choosingSpace by mutableStateOf(false)
     private var spacesEpoch = 0
     private var spacesPoll: Job? = null
+    // The blocking host calls behind an open run here, off the lifecycle scope, so the
+    // screen can stop waiting for them at a deadline instead of for as long as OkHttp does.
+    private val spacesIo = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var lastFocusedGameId by mutableStateOf<String?>(null)
     private var lastFocusedPrimaryFilter by mutableStateOf(NovaLibraryPrimaryFilter.ALL)
     private var controllerHintChromeState by mutableStateOf(NovaControllerHintChromeState())
@@ -243,6 +255,7 @@ class NovaLibraryActivity : NovaActivity() {
         streamPcUuid = intent.getStringExtra(EXTRA_PC_UUID)
         streamServerCommands = intent.getStringArrayListExtra(EXTRA_SERVER_COMMANDS)
         streamServerCert = intent.getByteArrayExtra(EXTRA_SERVER_CERT)
+        spacesExpected = intent.getBooleanExtra(EXTRA_SPACES_AVAILABLE, false)
 
         if (streamHost.isBlank()) {
             finish()
@@ -433,6 +446,7 @@ class NovaLibraryActivity : NovaActivity() {
         super.onResume()
         spaceFocusEpoch++
         startSpacesPolling()
+        if (NovaSpaceRetrySignal.consume(this, streamPcUuid, streamHost)) retrySpaceOpenWhenChecked()
         if (recreateForThemeChangeIfNeeded()) return
         revealControllerHints(NovaControllerHintChromeEvent.EXPLICIT_REVEAL)
         if (
@@ -458,16 +472,46 @@ class NovaLibraryActivity : NovaActivity() {
         spaceOpenPending = false
     }
 
+    /**
+     * Watches the host's Spaces at the pace the answer deserves.
+     *
+     * A host that answered 404 or enabled:false has nothing to watch, so the poll stops for
+     * the session; only when the host card promised Spaces does it re-probe slowly, since a
+     * restarting host answers 404 for a while. A device with no Space listed is watched
+     * slowly too, so the state clears itself once one is assigned in Polaris. An open chooser
+     * refreshes at once and then every 5 s; a closed one every 15 s. Failures back off,
+     * doubling to a minute, and recover on the first good answer. Before this, every host
+     * was polled every 5 s for the life of the library, Sunshine included.
+     */
     private fun startSpacesPolling(delayFirst: Boolean = false) {
         spacesPoll?.cancel()
         if (choosingSpace || spaceOpenPending || !::apiClient.isInitialized) return
         val epoch = ++spacesEpoch
         spacesPoll = lifecycleScope.launch {
-            if (delayFirst) delay(5000)
+            var failures = 0
+            var first = true
             while (isActive) {
-                refreshSpaces(epoch)
-                delay(5000)
+                val wait = when {
+                    first && !delayFirst -> 0L
+                    first -> SPACES_POLL_OPEN_MS
+                    failures > 0 -> (SPACES_POLL_CLOSED_MS shl (failures - 1).coerceAtMost(3)).coerceAtMost(SPACES_POLL_MAX_MS)
+                    else -> spacesPollInterval() ?: return@launch
+                }
+                first = false
+                if (wait > 0L) delay(wait)
+                failures = if (refreshSpaces(epoch)) 0 else failures + 1
             }
+        }
+    }
+
+    /** The idle interval for the current answer, or null when there is nothing left to watch. */
+    private fun spacesPollInterval(): Long? {
+        val snapshot = spacesSnapshot
+        return when {
+            snapshot == null || !snapshot.enabled -> if (spacesExpected) SPACES_POLL_SLOW_MS else null
+            snapshot.spaces.isEmpty() -> SPACES_POLL_SLOW_MS
+            chooseSpaceVisible || NovaSpaceUiState.singleSpace(allGames) != null -> SPACES_POLL_OPEN_MS
+            else -> SPACES_POLL_CLOSED_MS
         }
     }
 
@@ -477,14 +521,12 @@ class NovaLibraryActivity : NovaActivity() {
             if (epoch != spacesEpoch) false else {
                 val previous = spacesSnapshot?.selectedId
                 spacesSnapshot = next; spacesChecked = true; spacesError = null
-                if (previous != null && previous != next?.selectedId) {
-                    allGames = emptyList(); clearFilters(); loadGames(forceRefresh = true)
-                }
+                if (previous != null && previous != next?.selectedId) replaceLibraryForSpace()
                 true
             }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
-            if (epoch == spacesEpoch) { spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again." }
+            if (epoch == spacesEpoch) { spacesChecked = false; spacesError = getString(R.string.nova_space_check_failed) }
             false
         }
     }
@@ -492,12 +534,16 @@ class NovaLibraryActivity : NovaActivity() {
     private fun showSpaceChooser() {
         cancelPendingSpaceOpen()
         chooseSpaceVisible = true
-        startSpacesPolling(delayFirst = true)
+        // The chooser shows live status, so it opens on a fresh answer rather than one up
+        // to 15 s old.
+        startSpacesPolling()
     }
 
     private fun chooseSpace(id: String) {
         val snapshot = spacesSnapshot ?: return
-        if (choosingSpace || !spacesChecked || !snapshot.canSwitch ||
+        // A stale snapshot is safe to choose from: the host checks previous_space_id and
+        // refuses with its own sentence if the Space moved under us.
+        if (choosingSpace || !snapshot.canSwitch ||
             (snapshot.spaces.none { it.id == id } && !(id == "desktop" && snapshot.desktopAllowed))) return
         if (id == snapshot.selectedId) { chooseSpaceVisible = false; spaceFocusEpoch++; return }
         choosingSpace = true; spacesEpoch++; spacesPoll?.cancel()
@@ -506,18 +552,55 @@ class NovaLibraryActivity : NovaActivity() {
                 val next = withContext(Dispatchers.IO) { apiClient.selectSpace(id, snapshot.selectedId) }
                 spacesSnapshot = next; spacesChecked = true; spacesError = null
                 launchErrorMessage = null; activeSession = null; chooseSpaceVisible = false; spaceFocusEpoch++
-                allGames = emptyList()
-                clearFilters()
-                loadGames(forceRefresh = true)
-                refreshActiveSession(scheduleFollowUps = true)
+                replaceLibraryForSpace()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                spacesChecked = false
-                spacesError = "The Space choice could not be confirmed. Refresh Spaces before trying again."
+                // The host's own sentence when it sent one (the Space changed under us, a
+                // stream is still up); otherwise what happens next, since the refresh that
+                // follows is automatic and there is no button for it.
+                spacesError = (e as? PolarisApiRejectedException)?.rejection?.error?.takeIf { it.isNotBlank() }
+                    ?: getString(R.string.nova_space_change_failed)
             } finally {
                 choosingSpace = false
                 if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startSpacesPolling()
             }
+        }
+    }
+
+    /**
+     * The Space changed under the library. The old games go, the saved filters are left
+     * alone (only the in-memory ones reset, so the next visit keeps what the person chose),
+     * and the loading grid shows until the new library lands rather than "No games yet".
+     */
+    private fun replaceLibraryForSpace() {
+        allGames = emptyList()
+        resetFiltersInMemory()
+        loadGames(forceRefresh = true, replaceLibrary = true)
+    }
+
+    private fun resetFiltersInMemory() {
+        filterState = NovaLibraryFilterState()
+        lastFocusedPrimaryFilter = NovaLibraryPrimaryFilter.ALL
+        searchQuery = ""
+        activeFilterSheet = null
+    }
+
+    /** Whether the device's current Space can be opened or resumed, by the host's account. */
+    private fun spaceOpenable(snapshot: PolarisSpaces): Boolean =
+        snapshot.available && snapshot.selected?.openable == true
+
+    /** The person gave up on a check the host has not answered; polling resumes. */
+    private fun cancelSpaceOpen() {
+        cancelPendingSpaceOpen()
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) startSpacesPolling()
+    }
+
+    /** A failed Space stream asked to try again: open the Space once the check after returning lands. */
+    private fun retrySpaceOpenWhenChecked() {
+        lifecycleScope.launch {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(6)
+            while (!spacesChecked && System.nanoTime() < deadline) delay(200)
+            NovaSpaceUiState.singleSpace(allGames)?.let { openSpace(it) }
         }
     }
 
@@ -536,7 +619,8 @@ class NovaLibraryActivity : NovaActivity() {
         if (chooseSpaceVisible) return super.onKeyDown(keyCode, event)
         return when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_PAGE_UP -> {
-                if (!activeOptionsSheet) openLibraryOptionsSheet()
+                // The Space screen has no grid for Library Options to filter or lay out.
+                if (!activeOptionsSheet && NovaSpaceUiState.singleSpace(allGames) == null) openLibraryOptionsSheet()
                 true
             }
             KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_PAGE_DOWN -> {
@@ -638,6 +722,11 @@ class NovaLibraryActivity : NovaActivity() {
         return true
     }
 
+    override fun onDestroy() {
+        spacesIo.cancel()
+        super.onDestroy()
+    }
+
     override fun onStop() {
         activeSessionRefreshGate.invalidateForStop()
         activeSessionImmediateRefreshJob?.cancel()
@@ -649,9 +738,13 @@ class NovaLibraryActivity : NovaActivity() {
         super.onStop()
     }
 
-    private fun loadGames(forceRefresh: Boolean) {
+    private fun loadGames(forceRefresh: Boolean, replaceLibrary: Boolean = false) {
         if (forceRefresh) refreshActiveSession(scheduleFollowUps = true)
-        if (forceRefresh) {
+        // A refresh the person asked for also re-asks the host about Spaces at once.
+        if (forceRefresh && !replaceLibrary) startSpacesPolling()
+        // A Space switch replaces the whole library, so it shows the loading grid rather
+        // than a pull-to-refresh spinner over "No games yet".
+        if (forceRefresh && !replaceLibrary) {
             isRefreshing = true
         } else {
             isInitialLoading = true
@@ -676,7 +769,8 @@ class NovaLibraryActivity : NovaActivity() {
                         settings = settings,
                     )
                 }
-                if (forceRefresh) apiClient.clearCoverCache()
+                // Artwork keys carry the Space, so a switch keeps what is already decoded.
+                if (forceRefresh && !replaceLibrary) apiClient.clearCoverCache()
                 val published = artworkLibraryUpdateViewModel.publishRefresh(
                     token = artworkRefreshToken,
                     games = result.games,
@@ -888,22 +982,43 @@ class NovaLibraryActivity : NovaActivity() {
 
     private fun openSpace(game: PolarisGame) {
         if (!NovaSpaceUiState.isSpace(game) || spaceOpenPending || choosingSpace || !spacesChecked ||
-            (spacesSnapshot != null && (!spacesSnapshot!!.available || spacesSnapshot!!.selected?.state !in setOf("ready", "running")))) return
+            (spacesSnapshot != null && !spaceOpenable(spacesSnapshot!!))) return
         val expected = spacesSnapshot?.selectedId
         spaceOpenPending = true; spacesEpoch++; spacesPoll?.cancel()
         val openEpoch = ++spaceOpenEpoch
         spaceOpenJob = lifecycleScope.launch {
+            // The host calls block their thread until OkHttp gives up, which can be most of a
+            // minute. They run on their own scope and the screen waits with a deadline; a
+            // late answer finds its epoch retired and changes nothing. Null means the
+            // deadline passed; a failure inside is carried as a Result so it cannot be
+            // mistaken for the 404 that getSpaces reports as null.
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SPACE_OPEN_CHECK_TIMEOUT_MS)
+            suspend fun <T> withinDeadline(work: () -> T): Result<T>? {
+                val pending = spacesIo.async { runCatching(work) }
+                val remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()).coerceAtLeast(1L)
+                return withTimeoutOrNull(remaining) { pending.await() }
+            }
             try {
-                val fresh = withContext(Dispatchers.IO) { apiClient.getSpaces() }
+                val checked = withinDeadline { apiClient.getSpaces() }
                 if (openEpoch != spaceOpenEpoch) return@launch
-                spacesSnapshot = fresh; spacesChecked = true; spacesError = null
-                if (fresh?.selectedId != expected || (fresh != null && (!fresh.available || fresh.selected?.state !in setOf("ready", "running")))) {
-                    launchErrorMessage = "Space status changed. Review it before opening."
+                if (checked == null) {
+                    launchErrorMessage = getString(R.string.nova_space_check_timed_out)
                     return@launch
                 }
-                val session = withContext(Dispatchers.IO) { queryActiveSession() }
+                val fresh = checked.getOrThrow()
+                spacesSnapshot = fresh; spacesChecked = true; spacesError = null
+                if (fresh?.selectedId != expected || (fresh != null && !spaceOpenable(fresh))) {
+                    launchErrorMessage = getString(R.string.nova_space_status_changed)
+                    return@launch
+                }
+                val sessionCheck = withinDeadline { queryActiveSession() }
                 if (openEpoch != spaceOpenEpoch || isFinishing || isDestroyed ||
                     !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return@launch
+                if (sessionCheck == null) {
+                    launchErrorMessage = getString(R.string.nova_space_check_timed_out)
+                    return@launch
+                }
+                val session = sessionCheck.getOrThrow()
                 when (NovaSpaceUiState.availability(game, session)) {
                     NovaSpaceUiState.Availability.RESUMABLE -> resumeActiveSession(requireNotNull(session))
                     NovaSpaceUiState.Availability.IN_USE -> {
@@ -916,7 +1031,7 @@ class NovaLibraryActivity : NovaActivity() {
                 // A blocking call can fail after cancellation. Ignore its error
                 // just as we ignore a successful result from a retired request.
                 if (openEpoch == spaceOpenEpoch) {
-                    spacesChecked = false; spacesError = "Could not check Spaces. Check your connection and try again."
+                    spacesChecked = false; spacesError = getString(R.string.nova_space_check_failed)
                 }
             } finally {
                 // A retired request must not clear a newer action's pending state
@@ -946,7 +1061,9 @@ class NovaLibraryActivity : NovaActivity() {
                 serverName = streamPcName.ifBlank { streamHost },
                 serverUuid = streamPcUuid,
             ).putExtra(NovaGameDetailActivity.EXTRA_OPEN_SPACE, openSpace)
-                .putExtra(NovaGameDetailActivity.EXTRA_SPACE_SETTINGS, spaceSettings),
+                .putExtra(NovaGameDetailActivity.EXTRA_SPACE_SETTINGS, spaceSettings)
+                // A host without Spaces gets no Play Setup destination fan-out.
+                .putExtra(NovaGameDetailActivity.EXTRA_SPACES_ENABLED, spacesSnapshot?.enabled == true),
         )
         NovaThemeManager.applyForwardTransition(this)
     }
@@ -1354,6 +1471,42 @@ class NovaLibraryActivity : NovaActivity() {
         }
     }
 
+    /** The sentence under a disabled Open: what is wrong, in the host's words, never a bare disabled button. */
+    @Composable
+    private fun spaceScreenReason(snapshot: PolarisSpaces?, checked: Boolean): String? {
+        if (!checked) return stringResource(R.string.nova_space_checking_status)
+        snapshot ?: return null
+        NovaSpacesCopy.unavailableReason(snapshot)?.let { return stringResource(it) }
+        val selected = snapshot.selected ?: return null
+        // The screen already carries the in-use sentence next to its chip.
+        if (selected.state == "in_use") return null
+        return NovaSpacesCopy.openBlockedReason(selected)?.let { stringResource(it) }
+    }
+
+    @Composable
+    private fun spacesRecoveryState(snapshot: PolarisSpaces): NovaLibraryRecoveryUiState? =
+        when (NovaSpacesCopy.emptyLibraryCase(snapshot)) {
+            NovaSpacesCopy.EmptyLibraryCase.NO_SPACE_ASSIGNED -> NovaLibraryRecoveryUiState(
+                eyebrow = stringResource(R.string.nova_space_bar_spaces),
+                title = stringResource(R.string.nova_space_no_space_title),
+                message = stringResource(R.string.nova_space_no_space_message),
+                primaryActionLabel = stringResource(R.string.nova_space_open_in_polaris),
+                primaryAction = NovaLibraryRecoveryAction.OPEN_SPACES,
+                secondaryActionLabel = stringResource(R.string.nova_space_retry_check),
+                secondaryAction = NovaLibraryRecoveryAction.RETRY,
+            )
+            NovaSpacesCopy.EmptyLibraryCase.HOST_UNAVAILABLE -> NovaLibraryRecoveryUiState(
+                eyebrow = stringResource(R.string.nova_space_bar_spaces),
+                title = stringResource(R.string.nova_space_unavailable_title),
+                message = stringResource(NovaSpacesCopy.unavailableReason(snapshot) ?: R.string.nova_space_unavailable_generic),
+                primaryActionLabel = stringResource(R.string.nova_space_retry_check),
+                primaryAction = NovaLibraryRecoveryAction.RETRY,
+                secondaryActionLabel = stringResource(R.string.nova_space_open_in_polaris),
+                secondaryAction = NovaLibraryRecoveryAction.OPEN_SPACES,
+            )
+            null -> null
+        }
+
     @Composable
     private fun NovaLibraryScreen(
         serverName: String?,
@@ -1482,7 +1635,10 @@ class NovaLibraryActivity : NovaActivity() {
                             // Overlays the cinematic backdrop; must not fill its canvas.
                             paintsOpaqueBackground = false
                         }
-                    }
+                    },
+                    // The chooser and the Space screen paint an opaque window over it; no
+                    // reason to keep drawing 300 stars nobody can see.
+                    update = { view -> view.setCovered(chooseSpaceVisible || space != null) },
                 )
             }
             Box(
@@ -1497,8 +1653,14 @@ class NovaLibraryActivity : NovaActivity() {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     if (chooseSpaceVisible && spacesSnapshot != null) {
-                        NovaSpaceChooser(spacesSnapshot!!, choosingSpace || !spacesChecked, spacesError,
-                            onChoose = ::chooseSpace, onBack = { chooseSpaceVisible = false; spaceFocusEpoch++ })
+                        NovaSpaceChooser(
+                            snapshot = spacesSnapshot!!,
+                            busy = choosingSpace,
+                            statusKnown = spacesChecked,
+                            error = spacesError,
+                            onChoose = ::chooseSpace,
+                            onBack = { chooseSpaceVisible = false; spaceFocusEpoch++ },
+                        )
                     } else if (space != null) {
                         NovaSpaceContent(
                             game = space,
@@ -1511,10 +1673,11 @@ class NovaLibraryActivity : NovaActivity() {
                             onSettings = { showDetail(space, spaceSettings = true) },
                             onBack = onBack,
                             onSystem = onOpenSystemMenu,
+                            onCancel = if (spaceOpenPending) ::cancelSpaceOpen else null,
                             primaryEnabled = !spaceOpenPending && !choosingSpace && spacesChecked &&
-                                (spacesSnapshot == null || spacesSnapshot!!.available && spacesSnapshot!!.selected?.state in setOf("ready", "running")),
+                                (spacesSnapshot == null || spaceOpenable(spacesSnapshot!!)),
                             primaryLabel = if (spaceOpenPending) getString(R.string.nova_space_checking) else null,
-                            message = spacesError ?: launchErrorMessage ?: if (!spacesChecked) "Checking Space Status…" else null,
+                            message = spacesError ?: launchErrorMessage ?: spaceScreenReason(spacesSnapshot, spacesChecked),
                             focusEpoch = spaceFocusEpoch,
                             focusEnabled = !chooseSpaceVisible && !activeSystemMenu && !activeOptionsSheet && activeFilterSheet == null,
                         )
@@ -1529,7 +1692,8 @@ class NovaLibraryActivity : NovaActivity() {
                             )
                             NovaLibraryLandscapeShowcaseStripContent(
                                 environments = environments,
-                                environmentEnabled = !choosingSpace && spacesChecked,
+                                environmentEnabled = !choosingSpace,
+                                environmentStatusKnown = spacesChecked,
                                 onChooseEnvironment = ::showSpaceChooser,
                                 hostLabel = serverName?.takeIf { it.isNotBlank() } ?: serverHost,
                                 resultCount = model.resultCount,
@@ -1605,19 +1769,7 @@ class NovaLibraryActivity : NovaActivity() {
                                 .padding(bottom = controllerHintBarBottomPadding),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (environments != null) {
-                                NovaLibraryLandscapeShowcaseStripContent(
-                                    hostLabel = serverName.orEmpty().ifBlank { serverHost },
-                                    resultCount = model.resultCount,
-                                    layoutLabel = layoutModeLabel(model.optionsState.layoutMode),
-                                    polarisReady = clientSettings != null,
-                                    onOpenOptions = onOpenOptions,
-                                    onOpenSystemMenu = onOpenSystemMenu,
-                                    environments = environments,
-                                    environmentEnabled = !choosingSpace && spacesChecked,
-                                    onChooseEnvironment = ::showSpaceChooser,
-                                )
-                            } else NovaLibraryTopHeader(
+                            NovaLibraryTopHeader(
                                 serverName = serverName,
                                 serverHost = serverHost,
                                 model = model,
@@ -1628,6 +1780,19 @@ class NovaLibraryActivity : NovaActivity() {
                                 onOpenOptions = onOpenOptions,
                                 onOpenSystemMenu = onOpenSystemMenu
                             )
+                            if (environments != null) {
+                                // Its own row under the header. The 60 dp header cannot hold
+                                // the bar, and the landscape strip it used to borrow pushed
+                                // Options and System off the right edge of a phone.
+                                NovaEnvironmentBar(
+                                    spaces = environments,
+                                    enabled = !choosingSpace,
+                                    statusKnown = spacesChecked,
+                                    onChoose = ::showSpaceChooser,
+                                    compact = true,
+                                    framed = true,
+                                )
+                            }
                             if (
                                 NovaLibraryUiStateMapper.showStandaloneHomeHero(
                                     layoutMode = model.optionsState.layoutMode,
@@ -1707,7 +1872,9 @@ class NovaLibraryActivity : NovaActivity() {
                             targetOffsetY = { it / 2 }
                         )
                 ) {
-                    NovaLibraryCinematicControllerHints(
+                    // The chooser carries its own A and B hints; the library's "X Library"
+                    // underneath it was a second bar for a screen that has no library.
+                    if (!chooseSpaceVisible) NovaLibraryCinematicControllerHints(
                         hints = visibleControllerHints,
                         compact = isLandscape,
                         semanticsDescription = controllerHintDescription,
@@ -2649,6 +2816,7 @@ class NovaLibraryActivity : NovaActivity() {
                 NovaLibraryRecoveryAction.RETRY -> onRefresh()
                 NovaLibraryRecoveryAction.MANAGE_LIBRARY -> onManageServer()
                 NovaLibraryRecoveryAction.CLEAR_FILTERS -> onClearFilters()
+                NovaLibraryRecoveryAction.OPEN_SPACES -> openServerManagementAt("/#/spaces")
             }
         }
         NovaLibraryPanel(
@@ -2698,7 +2866,12 @@ class NovaLibraryActivity : NovaActivity() {
                             onAction = onRecoveryAction
                         )
                     } else if (model.filteredGames.isEmpty() && !showStageContent) {
-                        val emptyRecoveryState = NovaLibraryUiStateMapper.emptyRecoveryState(
+                        // An empty library with Spaces as the reason says so; "No games yet.
+                        // Manage Library" was a diagnosis of the wrong thing.
+                        val spacesRecoveryState = spacesSnapshot
+                            ?.takeIf { model.summary.totalCount == 0 }
+                            ?.let { spacesRecoveryState(it) }
+                        val emptyRecoveryState = spacesRecoveryState ?: NovaLibraryUiStateMapper.emptyRecoveryState(
                             emptyState = model.emptyState,
                             totalCount = model.summary.totalCount,
                             sourceName = filterState.source
@@ -4106,7 +4279,13 @@ class NovaLibraryActivity : NovaActivity() {
         const val EXTRA_PC_UUID = "pc_uuid"
         const val EXTRA_SERVER_COMMANDS = "server_commands"
         const val EXTRA_SERVER_CERT = "server_cert"
+        const val EXTRA_SPACES_AVAILABLE = "spaces_available"
         private const val CONTROLLER_HINT_IDLE_REVEAL_MS = 4_000L
+        private const val SPACES_POLL_OPEN_MS = 5_000L
+        private const val SPACES_POLL_CLOSED_MS = 15_000L
+        private const val SPACES_POLL_SLOW_MS = 30_000L
+        private const val SPACES_POLL_MAX_MS = 60_000L
+        private const val SPACE_OPEN_CHECK_TIMEOUT_MS = 12_000L
         private const val CONTROLLER_HINT_ANIMATION_MS = 180
         private const val CONTROLLER_AXIS_INTENT_THRESHOLD = 0.35f
         /** One corner radius for library surfaces, so panels, the continue-playing row and

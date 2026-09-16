@@ -9,7 +9,9 @@ More of your library, right where you play. Nova 1.4.8 is matched with Polaris 1
 **Your Space, Your Library**
 
 - Browse game posters in your selected Space, or open Steam Big Picture to sign in and choose a game.
-- See where you are playing and change Spaces from the same row as your game controls, Options and System.
+- Your Space sits with the library controls: beside the host name in landscape, on its own row under the header in portrait, with its status and Change Space next to it.
+- Every Space status reads the same everywhere, in Nova and in the Polaris console: Ready, Starting, Playing, In use, Stopping, Unavailable, and Status unknown while a check is failing. The chooser marks your current Space, shows a status chip on each row, and lets you browse a Space that is starting, stopping or in use.
+- A device with no Space assigned, or a host that cannot offer its Spaces right now, says so and points at the Spaces page in Polaris instead of showing an empty library.
 - Resume a session or leave it with a clear explanation of what will stop.
 - Keep touch and controller navigation within reach, including on smaller screens and with larger text.
 
@@ -24,6 +26,9 @@ More of your library, right where you play. Nova 1.4.8 is matched with Polaris 1
 - Launch problems now show the host's explanation and suggested fix instead of a bare error code.
 - Play Setup explains why a stream is using SDR and points out when Request HDR is switched off.
 - Changing Spaces cancels an unfinished connection check, so a late reply cannot overwrite your new selection.
+- A Space that cannot start shows the host's reason, with Try Again and Back to Library; a tap beside the sheet no longer ends the attempt.
+- Nova asks a host about Spaces only when that host has them, waits no more than twelve seconds on a Space check before offering Cancel, and keeps its stars still while a screen covers them or the device is saving power.
+- Play Setup checks where a game can play in one pass, offers a Space's Steam when the game is not installed there, and turns Play into Retry Space Check when a check fails.
 
 **Before You Try Spaces**
 

@@ -192,7 +192,7 @@ internal fun NovaGameDetailOverview(
             )
 
             Text(
-                text = novaGameDetailIdentityLine(sourceLabel, lastPlayedText, game).let { if (game.space == null) it.uppercase() else it },
+                text = novaGameDetailIdentityLine(sourceLabel, lastPlayedText, game, spaceLabel = game.space?.let { stringResource(R.string.nova_space_in_format, it.name) }).let { if (game.space == null) it.uppercase() else it },
                 color = colors.textSecondary,
                 style = NovaChromeType.label(fontSize = 11.sp, letterSpacing = 0.17.em),
                 maxLines = 1,
@@ -236,7 +236,7 @@ internal fun NovaGameDetailOverview(
             )
 
             if (game.space != null) Text(
-                text = "Save In Your Game Before Disconnecting. Leaving Ends This Space’s Game Session.",
+                text = stringResource(R.string.nova_space_exit_notice),
                 color = colors.textSecondary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 10.dp).testTag("nova-space-exit-notice"),
@@ -969,7 +969,8 @@ private fun novaGameDetailIdentityLine(
     sourceLabel: String,
     lastPlayedText: String?,
     game: PolarisGame,
-): String = listOf(game.space?.let { "Playing In ${it.name}" }, sourceLabel, lastPlayedText, game.genres.firstOrNull())
+    spaceLabel: String?,
+): String = listOf(spaceLabel, sourceLabel, lastPlayedText, game.genres.firstOrNull())
     .filter { !it.isNullOrBlank() }
     .joinToString("  ·  ")
 

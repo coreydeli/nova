@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.papi.nova.ui.compose.NovaBadge
 import com.papi.nova.ui.compose.NovaChromeType
 import com.papi.nova.ui.compose.NovaRadius
 import com.papi.nova.ui.compose.novaHoldsFirstFocus
@@ -540,6 +542,9 @@ internal fun NovaSteamChoiceRow(
      * when the group's contents change.
      */
     autoFocus: Boolean = false,
+    modifier: Modifier = Modifier,
+    /** A short status word drawn as a chip before the chevron, and read after the label. */
+    badge: String = "",
 ) {
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
@@ -572,7 +577,7 @@ internal fun NovaSteamChoiceRow(
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(bottom = NOVA_DETAIL_ROW_GAP)
             .heightIn(min = NOVA_DETAIL_ROW_MIN_HEIGHT)
@@ -612,7 +617,11 @@ internal fun NovaSteamChoiceRow(
             // rather than 6dp above it. Four rows plus a legend has to clear a 325dp
             // landscape viewport, and four times six is most of the difference.
             .padding(horizontal = 14.dp, vertical = 6.dp)
-            .semantics { contentDescription = if (value.isBlank()) label else "$label. $value" },
+            .semantics {
+                contentDescription = listOf(label, value, badge).filter { it.isNotBlank() }.joinToString(". ")
+                // A row that offers an action it cannot take right now says so to TalkBack and to tests.
+                if (onClick != null && !enabled) disabled()
+            },
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -645,6 +654,13 @@ internal fun NovaSteamChoiceRow(
                 style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
                 maxLines = 1,
                 modifier = Modifier.padding(start = 12.dp),
+            )
+        }
+        if (badge.isNotBlank()) {
+            NovaBadge(
+                text = badge,
+                color = if (enabled) colors.textSecondary else colors.textMuted,
+                modifier = Modifier.padding(start = 10.dp),
             )
         }
         if (actionable) {

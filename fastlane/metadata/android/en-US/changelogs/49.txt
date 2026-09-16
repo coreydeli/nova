@@ -1,6 +1,6 @@
 Nova 1.4.8
 
-Browse your Space with game posters and Steam Big Picture. Space selection and library controls now share one row.
+Browse your Space with game posters and Steam Big Picture. Your Space, its status and Change Space sit beside the library controls.
 
 Choose 144, 165 or 240 FPS on supported setups. Match controller buttons by label or position for each game. Get clearer launch errors and HDR guidance.
 

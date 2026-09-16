@@ -11,6 +11,7 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
+import androidx.core.widget.TextViewCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.papi.nova.PcViewModel
@@ -270,12 +271,13 @@ class PcGridAdapter(
                     primaryAction?.setText(R.string.pcview_card_action_open_library)
                     setPrimaryActionReady(primaryAction, true)
                     if (obj.details.spacesAvailable) {
-                        statusHint?.text = "Spaces Available · Choose Your Space In Library"
-                        statusHint?.visibility = View.VISIBLE
+                        setStatusHint(statusHint, R.string.pcview_card_hint_spaces)
                         statusHint?.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_spaces_planet, 0, 0, 0)
-                        statusHint?.compoundDrawablePadding = 8
+                        statusHint?.compoundDrawablePadding = (6 * context.resources.displayMetrics.density).toInt()
+                        statusHint?.let {
+                            TextViewCompat.setCompoundDrawableTintList(it, ColorStateList.valueOf(NovaThemeManager.getAccentColor(context)))
+                        }
                     } else {
-                        statusHint?.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
                         setStatusHint(statusHint, R.string.pcview_card_hint_open_library)
                     }
                 } else if (obj.details.libraryState == ComputerDetails.LibraryState.UNKNOWN) {
@@ -368,6 +370,8 @@ class PcGridAdapter(
     private fun setStatusHint(statusHint: TextView?, textRes: Int) {
         statusHint ?: return
         statusHint.setText(textRes)
+        // Cards are recycled: the planet belongs to the Spaces hint alone, never beside "Offline".
+        statusHint.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
         statusHint.visibility = View.VISIBLE
     }
 

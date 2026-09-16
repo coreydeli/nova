@@ -1,92 +1,138 @@
 package com.papi.nova.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.papi.nova.R
 import com.papi.nova.api.PolarisSpaces
 import com.papi.nova.ui.compose.LocalNovaComposeColors
 import com.papi.nova.ui.compose.NOVA_FIRST_FOCUS_SETTLE_MS
 import com.papi.nova.ui.compose.NovaActionButton
+import com.papi.nova.ui.compose.NovaControllerHint
+import com.papi.nova.ui.compose.NovaControllerHintBar
 import kotlinx.coroutines.delay
 
-internal fun spaceStateLabel(state: String): String = when (state) {
-    "ready" -> "Ready To Play"
-    "starting" -> "Starting"
-    "running" -> "Your Stream Is Running"
-    "stopping" -> "Stopping"
-    "in_use" -> "In Use"
-    else -> "Unavailable"
-}
-
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * The Space chooser, in the detail window's row grammar: the current Space marked, a status
+ * chip on every row, and A/B hints at the foot.
+ *
+ * Rows stay selectable while a Space is starting, stopping or in use, because choosing a
+ * Space is how you browse its games; only what the host says cannot run at all is off. Focus
+ * is claimed once, when the chooser opens, so a poll that changes a chip does not move the
+ * cursor. Three Spaces and the Desktop fit a Retroid Pocket 6 without scrolling.
+ */
 @Composable
-internal fun NovaSpaceChooser(snapshot: PolarisSpaces, busy: Boolean, error: String?,
-    onChoose: (String) -> Unit, onBack: () -> Unit) {
+internal fun NovaSpaceChooser(
+    snapshot: PolarisSpaces,
+    busy: Boolean,
+    statusKnown: Boolean,
+    error: String?,
+    onChoose: (String) -> Unit,
+    onBack: () -> Unit,
+) {
     val colors = LocalNovaComposeColors.current
-    val focus = remember { FocusRequester() }
     val backFocus = remember { FocusRequester() }
     val input = LocalInputModeManager.current
-    LaunchedEffect(snapshot.selectedId, busy, snapshot.canSwitch) {
+    val blocked = NovaSpacesCopy.switchBlockedReason(snapshot)?.let { stringResource(it) }
+    LaunchedEffect(Unit) {
         delay(NOVA_FIRST_FOCUS_SETTLE_MS)
         input.requestInputMode(InputMode.Keyboard)
-        runCatching { (if (busy || !snapshot.canSwitch) backFocus else focus).requestFocus() }
+        // The current row claims focus itself; when no row can, Back is the only target.
+        if (!snapshot.canSwitch) runCatching { backFocus.requestFocus() }
     }
-    Box(Modifier.fillMaxSize().background(colors.window).windowInsetsPadding(WindowInsets.safeDrawing),
-        contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
-    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()
-        .verticalScroll(rememberScrollState()).padding(24.dp).testTag("nova-space-chooser"),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Change Space", color = colors.textPrimary, fontSize = 28.sp)
-        Text("Choose your Space to browse its games and saves. Each Space keeps its own Steam sign-in.",
-            color = colors.textSecondary, fontSize = 16.sp)
-        Text("The Space name identifies your gaming environment. Check or change the Steam account inside Steam Big Picture.",
-            color = colors.textSecondary, fontSize = 14.sp)
-        if (!snapshot.canSwitch) Text("Save your game and end your stream before switching Spaces.", color = colors.textPrimary)
-        error?.let { Text(it, color = colors.textPrimary) }
-        if (snapshot.desktopAllowed) {
-            NovaActionButton(text = "Desktop", onClick = { onChoose("desktop") },
-                selected = snapshot.selectedId == "desktop", enabled = !busy && snapshot.canSwitch, minHeight = 52.dp,
-                modifier = (if (snapshot.selectedId == "desktop") Modifier.focusRequester(focus) else Modifier).fillMaxWidth()
-                    .testTag("nova-space-choice-desktop"))
-            Text("Your computer’s usual games and desktop.", color = colors.textSecondary, fontSize = 14.sp)
-        }
-        snapshot.spaces.forEach { space ->
-            val bringIntoView = remember(space.id) { BringIntoViewRequester() }
-            var rowFocused by remember(space.id) { mutableStateOf(false) }
-            LaunchedEffect(rowFocused) {
-                if (rowFocused) bringIntoView.bringIntoView()
+    Box(
+        Modifier.fillMaxSize().background(colors.window).windowInsetsPadding(WindowInsets.safeDrawing),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp).testTag("nova-space-chooser"),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(stringResource(R.string.nova_space_change), color = colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = when {
+                    busy -> stringResource(R.string.nova_space_changing)
+                    blocked != null -> blocked
+                    else -> stringResource(R.string.nova_space_chooser_intro)
+                },
+                color = if (blocked != null && !busy) colors.textPrimary else colors.textSecondary,
+                fontSize = 14.sp,
+                modifier = Modifier.testTag("nova-space-chooser-caption"),
+            )
+            error?.let {
+                Text(it, color = colors.textPrimary, fontSize = 14.sp, modifier = Modifier.testTag("nova-space-chooser-error"))
             }
-            Row(modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView)
-                .onFocusChanged { rowFocused = it.hasFocus },
-                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                NovaSpaceAvatar(space.name)
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                NovaActionButton(text = space.name, onClick = { onChoose(space.id) }, selected = space.selected,
-                    enabled = !busy && snapshot.canSwitch, minHeight = 52.dp,
-                    modifier = (if (space.selected) Modifier.focusRequester(focus) else Modifier).fillMaxWidth()
-                        .testTag("nova-space-choice-${space.id}"))
-                Text(listOfNotNull(if (space.selected) "Current Space" else null, spaceStateLabel(space.state)).joinToString(" · "),
-                    color = colors.textSecondary, fontSize = 14.sp)
+            if (!statusKnown) {
+                Text(stringResource(R.string.nova_space_status_unknown_hint), color = colors.textSecondary, fontSize = 13.sp)
             }
+            val current = snapshot.selectedId
+            if (snapshot.desktopAllowed) {
+                NovaSteamChoiceRow(
+                    label = stringResource(R.string.nova_space_desktop),
+                    caption = stringResource(if (current == "desktop") R.string.nova_space_current else R.string.nova_space_desktop_caption),
+                    enabled = snapshot.canSwitch,
+                    onClick = { onChoose("desktop") },
+                    selected = current == "desktop",
+                    autoFocus = current == "desktop",
+                    modifier = Modifier.testTag("nova-space-choice-desktop"),
+                )
+            }
+            snapshot.spaces.forEach { space ->
+                val reason = NovaSpacesCopy.openBlockedReason(space)
+                NovaSteamChoiceRow(
+                    label = space.name,
+                    caption = when {
+                        space.selected -> stringResource(R.string.nova_space_current)
+                        reason != null -> stringResource(reason)
+                        else -> ""
+                    },
+                    enabled = snapshot.canSwitch && space.state != "unavailable",
+                    onClick = { onChoose(space.id) },
+                    selected = space.selected,
+                    badge = stringResource(NovaSpacesCopy.stateLabel(space.state)),
+                    autoFocus = space.selected,
+                    modifier = Modifier.testTag("nova-space-choice-${space.id}"),
+                )
+            }
+            NovaActionButton(
+                text = stringResource(R.string.nova_space_back),
+                onClick = onBack,
+                minHeight = 48.dp,
+                modifier = Modifier.focusRequester(backFocus).testTag("nova-space-chooser-back"),
+            )
+            NovaControllerHintBar(
+                hints = listOf(
+                    NovaControllerHint(stringResource(R.string.nova_controller_hint_a), stringResource(R.string.nova_controller_hint_select)),
+                    NovaControllerHint(stringResource(R.string.nova_controller_hint_b), stringResource(R.string.nova_controller_hint_back)),
+                ),
+                compact = true,
+            )
         }
-        }
-        NovaActionButton(text = "Back", onClick = onBack, minHeight = 52.dp,
-            modifier = Modifier.focusRequester(backFocus).testTag("nova-space-chooser-back"))
-    }
     }
 }

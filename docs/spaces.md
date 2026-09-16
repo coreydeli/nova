@@ -1,7 +1,8 @@
 # Spaces In Nova
 
-Spaces are optional gaming environments hosted by Polaris. Each Space keeps its
-own sign-ins, installed games, and saves. Nova connects you to a Space allowed for your paired device. Streaming Presets control picture and performance settings.
+A Space is a separate gaming setup on your Polaris host, with its own sign-ins,
+installed games and saves. Nova connects you to a Space allowed for your paired
+device. Preview: one Space at a time, no runtime download yet.
 
 This flow is part of the Spaces preview. Creating, assigning, renaming, removing,
 and restoring Spaces happens in the Polaris web interface under **Spaces**.
@@ -11,22 +12,31 @@ Docker on your Android device.
 ## Open Your Space
 
 1. Pair Nova with your Polaris host if it is not already paired.
-2. In Polaris, assign a Space to that device under **Spaces**, then **Default Space**.
-3. Open the host in Nova. **Playing In** identifies the selected Space in the
-   library toolbar, beside **Change Space**, **Options**, and **System**.
+2. In Polaris, open **Spaces**. Under **Your Spaces**, open **Default Space** and
+   pick the Space for that device.
+3. Open the host in Nova. **Your Space** names the selected Space and shows its
+   status, beside **Change Space**. In portrait it sits on its own row under the
+   library header; in landscape it shares the toolbar with the host name.
 4. Choose **Steam Big Picture**, then **Open Steam Big Picture**. Sign into Steam
    and install a game the first time you use this Space.
 5. Return to Nova and refresh the library. Select the installed game's poster,
    then **Play**. The library banner follows the focused game.
 
-A Space name identifies your gaming environment; it does not confirm which
+If a Space cannot start, Nova shows the host's reason with **Try Again** and
+**Back to Library**; **View Details** keeps the raw error for a support thread.
+If no Space is assigned to the device, the library says so and offers
+**Open Spaces in Polaris**. If the host cannot offer Spaces right now, the
+library shows the host's reason instead of an empty library.
+
+A Space name identifies the Space; it does not confirm which
 Steam account is signed in. Check or switch that account inside Steam Big Picture.
 Nova checks access and saved stream settings before launching. Required host
 checks, connection errors and settings reviews stay visible before launch.
 
 Nova offers **Resume** only for the matching game and Space session owned by this
-device. **In Use** means another device is using that Space. Availability remains
-subject to the host's current capacity and access rules.
+device. **In use** means another device is using that Space. Availability remains
+subject to the host's current capacity and access rules: the preview runs one
+Space at a time, and a Space the host cannot admit says why under **Open Space**.
 
 Older hosts that expose one Space without a game library retain the direct
 **Your Space → Open Space** screen. This opens that host's configured launcher;
@@ -34,28 +44,33 @@ the current Steam runtime uses Steam Big Picture.
 
 ## Choose Another Space
 
-1. In Polaris, choose a device's **Default Space**.
+1. In Polaris, under **Your Spaces**, set the device's **Default Space**.
 2. On any additional Space card, expand **Device Access** and allow that device.
    Wait for confirmation. Changing access requires all Space streams to be stopped.
 3. Open the host in Nova and select **Change Space**. Only your permitted Spaces appear.
-4. Pick a Space to browse its games. Select a game or Steam Big Picture when it
-   is **Ready To Play**.
+4. Pick a Space to browse its games. Each row shows the Space's status: **Ready**,
+   **Starting**, **Playing**, **In use**, **Stopping** or **Unavailable**. You can
+   pick a Space that is starting, stopping or in use to browse it; opening it
+   waits until it reads **Ready**. The current Space is marked, and **Desktop** is
+   a row like the others when the device may stream the host's desktop.
 
 Choosing a Space does not launch it. Polaris remembers your choice for this device
 across app and host restarts. Your device must finish its current stream and cleanup
 before switching. Other devices can keep playing while you choose.
 
-**In Use** means another device is using that Space. Choose another or wait for it
+**In use** means another device is using that Space. Choose another or wait for it
 to become ready. Nova checks status while this screen is open and checks again
-before opening. **Starting** and **Stopping** keep Open Space unavailable until the
-host finishes. If status cannot be verified, check the connection and try again.
+before opening. **Starting** and **Stopping** keep **Open Space** unavailable until
+the host finishes. If the status cannot be checked, the row reads **Status unknown**
+and Nova keeps trying; choosing still works, and the host confirms the choice.
 Older hosts without the chooser API retain their existing single-Space flow.
 
 ## Change Stream Settings
 
 Select a game, then open **Play Setup**. The host's available choices include
-**Resolution** and **Frame Rate**. **Change Space** chooses a permitted environment
-where that title is installed. These stream preferences are
+**Resolution** and **Frame Rate**. **Change Space** lists your permitted Spaces:
+a Space where the game is not installed offers that Space's Steam instead, and
+a Space that is starting, stopping or in use says so. These stream preferences are
 saved on this Android device and applied on the next Space launch. Settings
 currently follow the device's assigned Space; they are not separate saved presets
 for each Steam account.
@@ -82,9 +97,10 @@ general Streaming Presets remain separate from Space selection.
 ## Use A Controller
 
 Use the D-pad to move through game posters and the toolbar, **A** to select, and
-**B** to return. The artwork and selected-game banner follow focus. The toolbar
-keeps Space selection and library controls in one row; on narrow screens or with
-enlarged text, controller focus scrolls it to keep each action reachable. Touch
+**B** to return. The artwork and selected-game banner follow focus. In landscape
+the toolbar keeps the host name, your Space and the library controls in one row;
+on narrow screens or with enlarged text, controller focus scrolls it to keep each
+action reachable. In portrait your Space has its own row under the header. Touch
 controls perform the same actions.
 
 On the older single-Space screen, **X** opens Stream Settings. Returning from
@@ -124,15 +140,9 @@ The [Polaris troubleshooting steps](https://github.com/papi-ux/polaris/blob/mast
 explain what to retain for Doctor & Support. Audio reliability is still being
 validated for the preview.
 
-## Current Validation
+## Preview Status
 
-Two configured Spaces completed a 15 minute test at 1080p and 60 FPS, with
-Control Ultimate Edition on a wired Shield and PEAK on a Wi-Fi RP6. The listener
-reported clean Shield audio; the RP6 continued to record audio underruns.
-Reopening the RP6 Space used its retained Steam home while the Shield kept
-streaming. Reopening starts a new game session after disconnect.
-
-The [September 15 acceptance report](https://github.com/papi-ux/polaris/blob/master/docs/research/container-multiseat-acceptance-20260915.md)
-records the tested builds and limits. It does not establish sustained 120 or
-240 FPS gameplay, a complete first installation from published artifacts, or
-reliable audio on every client.
+The preview's validation record and its limits live in the
+[September 15 acceptance report](https://github.com/papi-ux/polaris/blob/master/docs/research/container-multiseat-acceptance-20260915.md).
+It does not establish sustained 120 or 240 FPS gameplay, a complete first
+installation from published artifacts, or reliable audio on every client.

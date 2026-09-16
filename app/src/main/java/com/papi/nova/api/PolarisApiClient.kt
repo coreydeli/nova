@@ -2385,12 +2385,30 @@ class PolarisApiClient @JvmOverloads constructor(
     }
 
     private fun readSpaces(response: okhttp3.Response): PolarisSpaces {
-        if (response.code != 200) throw PolarisApiRejectedException(PolarisApiRejection(response.code,
-            "space_request_rejected", if (response.code == 409) "Space changed or still in use. Refresh and try again."
-                else "Could not update Spaces. Check the connection and device access in Polaris."))
+        if (response.code != 200) throw PolarisApiRejectedException(spacesRejection(response))
         val bytes = response.body?.let { PolarisArtworkDiskCache.readBounded(it.byteStream(), 2 * 1024 * 1024) }
             ?: throw IOException("Could not read Space status.")
         return PolarisSpaces.parse(bytes.toString(Charsets.UTF_8)) ?: throw IOException("Could not verify Space status.")
+    }
+
+    /**
+     * The host's own sentence for a refused Spaces request, when it sent one. Polaris answers
+     * a refusal with {status:false, error:<sentence>, code:<word>}; the old generic text stays
+     * for hosts that send nothing readable. Five different host sentences used to collapse
+     * into "Space changed or still in use".
+     */
+    private fun spacesRejection(response: okhttp3.Response): PolarisApiRejection {
+        val fallback = if (response.code == 409) "Space changed or still in use. Refresh and try again."
+            else "Could not update Spaces. Check the connection and device access in Polaris."
+        val json = runCatching {
+            response.body?.let { PolarisArtworkDiskCache.readBounded(it.byteStream(), 64 * 1024) }
+                ?.let { JSONObject(it.toString(Charsets.UTF_8)) }
+        }.getOrNull()
+        val message = json?.optString("error")?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= 400 && it.none { c -> c.code < 32 } }
+        val code = json?.optString("code")?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= 64 && it.all { c -> c.isLetterOrDigit() || c == '_' } }
+        return PolarisApiRejection(response.code, code ?: "space_request_rejected", message ?: fallback)
     }
 
     fun getClientSettings(): PolarisClientSettings? {
@@ -2765,6 +2783,7 @@ class PolarisApiClient @JvmOverloads constructor(
         val targetWidth: Int,
         val targetHeight: Int,
         val cacheKey: String,
+        val cacheOnDisk: Boolean,
     )
 
     private fun buildArtworkLoadSpec(game: PolarisGame, kind: String): ArtworkLoadSpec {
@@ -2776,7 +2795,11 @@ class PolarisApiClient @JvmOverloads constructor(
         val usesManifest = manifestUrl != null
         val imageUrl = manifestUrl
             ?: selectArtworkUrl(serverAddress, resolvedHttpsPort, game, normalizedKind)
-        val revision = if (usesManifest) game.artwork?.revision.orEmpty() else ""
+        // Space artwork comes through its own route without a manifest asset, but the
+        // manifest revision still says when it changed, which is all the disk cache needs.
+        val spaceArtwork = !usesManifest && game.space != null && imageUrl?.contains("/space-artwork/") == true
+        val revision = if (usesManifest || spaceArtwork) game.artwork?.revision.orEmpty() else ""
+        val cacheOnDisk = usesManifest || (spaceArtwork && revision.isNotBlank())
         // The decode bucket is part of the cache key: a poster-res bitmap must never be
         // served where the full-screen hero bucket is expected, and vice versa.
         val (targetWidth, targetHeight) = artworkTargetSize(normalizedKind)
@@ -2784,7 +2807,7 @@ class PolarisApiClient @JvmOverloads constructor(
         val cacheKey = if (usesManifest) {
             "polaris-artwork:${game.id}:$normalizedKind:$revision:$sizeBucket:$manifestUrl"
         } else {
-            "polaris-cover:${game.id}:$normalizedKind:$sizeBucket:${game.coverUrl}"
+            "polaris-cover:${game.id}:$normalizedKind:$revision:$sizeBucket:${game.coverUrl}"
         }
 
         return ArtworkLoadSpec(
@@ -2797,6 +2820,7 @@ class PolarisApiClient @JvmOverloads constructor(
             targetWidth = targetWidth,
             targetHeight = targetHeight,
             cacheKey = cacheKey,
+            cacheOnDisk = cacheOnDisk,
         )
     }
 
@@ -2812,7 +2836,7 @@ class PolarisApiClient @JvmOverloads constructor(
         val imageUrl = spec.imageUrl ?: return null
         cachedCover(spec.cacheKey)?.let { return it }
 
-        val exactDisk = if (spec.usesManifest) {
+        val exactDisk = if (spec.cacheOnDisk) {
             artworkDiskCache.load(
                 spec.gameId,
                 spec.kind,
@@ -2825,7 +2849,7 @@ class PolarisApiClient @JvmOverloads constructor(
         val bitmap = exactDisk ?: run {
             val fetched = fetchArtwork(imageUrl, spec.targetWidth, spec.targetHeight)
             if (fetched != null) {
-                if (spec.usesManifest) {
+                if (spec.cacheOnDisk) {
                     artworkDiskCache.store(
                         spec.gameId,
                         spec.kind,
@@ -2835,7 +2859,7 @@ class PolarisApiClient @JvmOverloads constructor(
                     )
                 }
                 fetched.bitmap
-            } else if (spec.usesManifest) {
+            } else if (spec.cacheOnDisk) {
                 artworkDiskCache.load(
                     spec.gameId,
                     spec.kind,

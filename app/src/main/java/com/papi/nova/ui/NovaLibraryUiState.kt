@@ -128,7 +128,9 @@ enum class NovaLibraryHeroSecondaryAction {
 enum class NovaLibraryRecoveryAction {
     RETRY,
     MANAGE_LIBRARY,
-    CLEAR_FILTERS
+    CLEAR_FILTERS,
+    /** The Spaces page of the Polaris console, where a device gets its Space. */
+    OPEN_SPACES
 }
 
 data class NovaLibraryRecoveryUiState(
