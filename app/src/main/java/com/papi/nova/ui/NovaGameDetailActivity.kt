@@ -1228,27 +1228,26 @@ class NovaGameDetailActivity : NovaActivity() {
                     val result = withContext(Dispatchers.IO) {
                         val spaces = apiClient.getSpaces()
                         val destinations = if (spaces == null || !spaces.enabled || spaces.spaces.isEmpty()) emptyList() else coroutineScope {
-                            val steamId = queryGame.steamAppid
-                            val steamLauncher = queryGame.space?.target == "big-picture-v1"
+                            // Steam games pair by app id; Steam Big Picture pairs with Big Picture on the other side.
+                            val match = NovaPlayDestinationMatch
                             val desktop = if (spaces.desktopAllowed || queryGame.space == null) async {
-                                val desktopGame = if (queryGame.space == null) queryGame else
-                                    runCatching { apiClient.getDesktopGames().firstOrNull {
-                                        steamId.isNotEmpty() && it.steamAppid == steamId
-                                    } }.getOrNull()
-                                NovaPlayDestination("desktop", getString(R.string.nova_space_desktop), desktopGame, "ready")
+                                val desktopGame = when {
+                                    queryGame.space == null -> queryGame
+                                    !match.needsDesktopLibrary(queryGame) -> null
+                                    else -> runCatching { match.desktopTitle(queryGame, apiClient.getDesktopGames()) }.getOrNull()
+                                }
+                                NovaPlayDestination(match.DESKTOP_ID, getString(R.string.nova_space_desktop), desktopGame, "ready")
                             } else null
                             val perSpace = spaces.spaces.map { space -> async {
                                 val current = space.id == queryGame.space?.id
                                 val library = when {
                                     current || !space.libraryEnabled -> null
-                                    steamId.isNotEmpty() || steamLauncher -> runCatching { apiClient.getSpaceLibrary(space.id) }.getOrNull()
+                                    match.needsSpaceLibrary(queryGame) -> runCatching { apiClient.getSpaceLibrary(space.id) }.getOrNull()
                                     else -> null
                                 }
-                                val title = if (current) queryGame else library?.firstOrNull {
-                                    if (steamLauncher) it.space?.target == "big-picture-v1" else it.steamAppid == steamId
-                                }
+                                val title = if (current) queryGame else match.spaceTitle(queryGame, library)
                                 // Not installed there, but that Space's Steam can be opened to install it.
-                                val steam = if (title == null && !steamLauncher) library?.firstOrNull { it.space?.target == "big-picture-v1" } else null
+                                val steam = match.spaceSteam(queryGame, library, title)
                                 NovaPlayDestination(
                                     space.id, space.name, title ?: steam, space.state,
                                     libraryEnabled = current || space.libraryEnabled,
@@ -1310,17 +1309,7 @@ class NovaGameDetailActivity : NovaActivity() {
                 stripTitle = getString(R.string.nova_space_where_it_opens),
                 options = playDestinations.map { choice -> NovaPlaySetupOption(
                     label = choice.name,
-                    consequence = when {
-                        choice.id == "desktop" -> getString(R.string.nova_space_option_desktop)
-                        !choice.libraryEnabled -> getString(R.string.nova_space_option_no_library)
-                        choice.game == null -> getString(R.string.nova_space_option_missing, choice.name)
-                        !choice.canOpen -> getString(
-                            NovaSpacesCopy.openBlockedReason(choice.state, choice.canOpen, choice.blockedReason)
-                                ?: R.string.nova_space_blocked_generic,
-                        )
-                        choice.viaSteam -> getString(R.string.nova_space_option_via_steam, choice.name)
-                        else -> getString(R.string.nova_space_option_use, choice.name)
-                    },
+                    consequence = getString(NovaPlayDestinationMatch.caption(choice), choice.name),
                     current = choice.id == (currentGame.space?.id ?: "desktop"),
                     enabled = !environmentChanging && environmentSnapshot?.canSwitch == true &&
                         choice.game != null && choice.canOpen,
