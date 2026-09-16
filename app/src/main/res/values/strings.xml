@@ -1778,6 +1778,8 @@
     <string name="nova_space_open_big_picture">Open Steam Big Picture</string>
     <string name="nova_space_play">Play</string>
     <string name="nova_space_profile_label_format">Space: %1$s</string>
+    <string name="nova_space_in_format">In %1$s</string>
+    <string name="nova_space_exit_notice">Save in your game before disconnecting. Leaving ends this Space’s game session.</string>
     <string name="nova_space_launch_issue_title">Space could not start</string>
     <string name="nova_space_launch_issue_default">Return to the library and try again. If this continues, open Spaces in Polaris and check Host Setup.</string>
     <string name="nova_space_launch_issue_details">View Details</string>

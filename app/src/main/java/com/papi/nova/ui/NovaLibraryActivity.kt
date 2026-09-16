@@ -1872,7 +1872,9 @@ class NovaLibraryActivity : NovaActivity() {
                             targetOffsetY = { it / 2 }
                         )
                 ) {
-                    NovaLibraryCinematicControllerHints(
+                    // The chooser carries its own A and B hints; the library's "X Library"
+                    // underneath it was a second bar for a screen that has no library.
+                    if (!chooseSpaceVisible) NovaLibraryCinematicControllerHints(
                         hints = visibleControllerHints,
                         compact = isLandscape,
                         semanticsDescription = controllerHintDescription,

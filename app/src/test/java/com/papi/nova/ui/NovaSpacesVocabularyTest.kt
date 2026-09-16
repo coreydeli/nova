@@ -21,6 +21,7 @@ class NovaSpacesVocabularyTest {
         "src/main/java/com/papi/nova/ui/NovaSpacesCopy.kt",
         "src/main/java/com/papi/nova/ui/NovaLibraryActivity.kt",
         "src/main/java/com/papi/nova/ui/NovaGameDetailActivity.kt",
+        "src/main/java/com/papi/nova/ui/NovaGameDetailOverview.kt",
         "src/main/java/com/papi/nova/grid/PcGridAdapter.kt",
         "src/main/java/com/papi/nova/Game.kt",
         "src/main/java/com/papi/nova/GameMenu.kt",
