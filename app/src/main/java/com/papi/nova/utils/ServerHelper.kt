@@ -174,6 +174,7 @@ object ServerHelper {
         forcePrivateAfterSteamClose: Boolean = false,
         streamMode: String = "",
         encoderBackend: String = "",
+        faceButtonLayout: String = "",
     ): Intent {
         val prefConfig = PreferenceConfiguration.readPreferences(parent)
         val selectedAndroidDisplay = if (prefConfig.enableFullExDisplay) {
@@ -219,6 +220,9 @@ object ServerHelper {
         }
         if (encoderBackend.isNotBlank()) {
             gameIntent.putExtra(Game.EXTRA_ENCODER_BACKEND, encoderBackend)
+        }
+        if (faceButtonLayout.isNotBlank()) {
+            gameIntent.putExtra(Game.EXTRA_FACE_BUTTON_LAYOUT, faceButtonLayout)
         }
         gameIntent.putExtra(Game.EXTRA_FORCE_PRIVATE_AFTER_STEAM_CLOSE, forcePrivateAfterSteamClose)
         gameIntent.putExtra(Game.EXTRA_WATCH_ONLY, watchOnly)
@@ -306,6 +310,7 @@ object ServerHelper {
         streamFps: Float = 0f,
         streamMode: String = "",
         encoderBackend: String = "",
+        faceButtonLayout: String = "",
     ): Intent {
         var serverCert: ByteArray? = null
         try {
@@ -343,6 +348,7 @@ object ServerHelper {
             forcePrivateAfterSteamClose = forcePrivateAfterSteamClose,
             streamMode = streamMode,
             encoderBackend = encoderBackend,
+            faceButtonLayout = faceButtonLayout,
         )
     }
 
@@ -413,6 +419,7 @@ object ServerHelper {
         forcePrivateAfterSteamClose: Boolean = false,
         streamMode: String = "",
         encoderBackend: String = "",
+        faceButtonLayout: String = "",
     ) {
         parent.getSharedPreferences("nova_prefs", Context.MODE_PRIVATE).edit()
             .putInt("last_played_$pcUuid", app.appId)
@@ -441,6 +448,7 @@ object ServerHelper {
             forcePrivateAfterSteamClose,
             streamMode = streamMode,
             encoderBackend = encoderBackend,
+            faceButtonLayout = faceButtonLayout,
         )
         parent.startActivity(intent)
         NovaThemeManager.applyFadeTransition(parent)
@@ -508,6 +516,7 @@ object ServerHelper {
         forcePrivateAfterSteamClose: Boolean = false,
         streamMode: String = "",
         encoderBackend: String = "",
+        faceButtonLayout: String = "",
     ) {
         parent.getSharedPreferences("nova_prefs", Context.MODE_PRIVATE).edit()
             .putInt("last_played_$pcUuid", app.appId)
@@ -533,6 +542,7 @@ object ServerHelper {
             forcePrivateAfterSteamClose = forcePrivateAfterSteamClose,
             streamMode = streamMode,
             encoderBackend = encoderBackend,
+            faceButtonLayout = faceButtonLayout,
         )
         parent.startActivity(intent)
         NovaThemeManager.applyFadeTransition(parent)

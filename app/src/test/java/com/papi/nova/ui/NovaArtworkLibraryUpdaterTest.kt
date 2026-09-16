@@ -48,6 +48,28 @@ class NovaArtworkLibraryUpdaterTest {
     )
 
     @Test
+    fun spaceLauncherKeepsBundledArtworkWhileInstalledGamesRefresh() = runBlocking {
+        val steam = PolarisGame(id = "space.alex.big-picture-v1",
+            space = PolarisGame.SpaceContext("alex", "Alex", "big-picture-v1"))
+        val control = PolarisGame(id = "space.alex.870780",
+            space = PolarisGame.SpaceContext("alex", "Alex", "870780"))
+        val calls = CopyOnWriteArrayList<String>()
+        val summary = NovaArtworkLibraryUpdater().run(listOf(steam, control, steam)) {
+            calls.add(it.id)
+            result(PolarisArtworkUpdateStatus.UPDATED)
+        }
+        assertEquals(listOf(control.id), calls)
+        assertEquals(2, summary.progress.total)
+        assertEquals(2, summary.progress.completed)
+        assertEquals(1, summary.progress.healthy)
+        assertEquals(1, summary.progress.updated)
+        assertTrue(summary.failedGameIds.isEmpty())
+        val launcherOnly = NovaArtworkLibraryUpdater().run(listOf(steam)) { error("Bundled artwork needs no network") }
+        assertEquals(1, launcherOnly.progress.healthy)
+        assertEquals(1, launcherOnly.progress.completed)
+    }
+
+    @Test
     fun boundsConcurrencyAndSkipsCustomArtwork() = runBlocking {
         val active = AtomicInteger(0)
         val maximumActive = AtomicInteger(0)

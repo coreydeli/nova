@@ -192,7 +192,7 @@ internal fun NovaGameDetailOverview(
             )
 
             Text(
-                text = novaGameDetailIdentityLine(sourceLabel, lastPlayedText, game).uppercase(),
+                text = novaGameDetailIdentityLine(sourceLabel, lastPlayedText, game).let { if (game.space == null) it.uppercase() else it },
                 color = colors.textSecondary,
                 style = NovaChromeType.label(fontSize = 11.sp, letterSpacing = 0.17.em),
                 maxLines = 1,
@@ -229,10 +229,17 @@ internal fun NovaGameDetailOverview(
                 onCorrectMatch = { onDestination(NovaGameDetailDestination.ARTWORK) },
             )
 
-            NovaGameDetailStatusLine(
+            if (game.space == null) NovaGameDetailStatusLine(
                 uiState = uiState,
                 optimizationState = optimizationState,
                 modifier = Modifier.padding(top = 11.dp),
+            )
+
+            if (game.space != null) Text(
+                text = "Save In Your Game Before Disconnecting. Leaving Ends This Space’s Game Session.",
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 10.dp).testTag("nova-space-exit-notice"),
             )
 
             if (reviewExpanded) {
@@ -488,7 +495,8 @@ private fun NovaGameDetailActions(
         )
     }
 
-    val pinVisible = shortcutPinState != GameShortcutPinState.UNSUPPORTED
+    val supportsHostCustomization = uiState.game.space == null
+    val pinVisible = supportsHostCustomization && shortcutPinState != GameShortcutPinState.UNSUPPORTED
     val pinLabel = when {
         shortcutPinRequestPending -> stringResource(R.string.nova_library_pin_shortcut_pending)
         shortcutPinState == GameShortcutPinState.PINNED ->
@@ -539,16 +547,16 @@ private fun NovaGameDetailActions(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (!reviewExpanded) playSetupAction(Modifier.weight(1f))
-                resetAction(Modifier.weight(1f))
+                if (supportsHostCustomization) resetAction(Modifier.weight(1f))
             }
 
-            if (pinVisible || !reviewExpanded) {
+            if (pinVisible || (!reviewExpanded && supportsHostCustomization)) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (pinVisible) pinAction(Modifier)
-                    if (!reviewExpanded) artworkAction(Modifier)
+                    if (!reviewExpanded && supportsHostCustomization) artworkAction(Modifier)
                 }
             }
         }
@@ -562,9 +570,9 @@ private fun NovaGameDetailActions(
             if (showEnd) endAction(Modifier)
             if (showRetry) retryAction(Modifier)
             if (!reviewExpanded) playSetupAction(Modifier)
-            resetAction(Modifier)
+            if (supportsHostCustomization) resetAction(Modifier)
             if (pinVisible) pinAction(Modifier)
-            if (!reviewExpanded) artworkAction(Modifier)
+            if (!reviewExpanded && supportsHostCustomization) artworkAction(Modifier)
         }
     }
 }
@@ -961,7 +969,7 @@ private fun novaGameDetailIdentityLine(
     sourceLabel: String,
     lastPlayedText: String?,
     game: PolarisGame,
-): String = listOf(sourceLabel, lastPlayedText, game.genres.firstOrNull())
+): String = listOf(game.space?.let { "Playing In ${it.name}" }, sourceLabel, lastPlayedText, game.genres.firstOrNull())
     .filter { !it.isNullOrBlank() }
     .joinToString("  ·  ")
 

@@ -2,12 +2,34 @@
 
 ## Unreleased
 
-## 1.4.8 - 2026-09-14
+## 1.4.8 - 2026-09-16
 
-Matched client for Polaris 1.4.8: the frame rate list goes past 120, and Play Setup says when SDR is because you never asked for HDR.
+More of your library, right where you play. Nova 1.4.8 is matched with Polaris 1.4.8, bringing a familiar game library to Spaces, more frame-rate choices and controller settings that fit each game.
 
-- Play Setup's resolved line now says which kind of SDR you are getting. "SDR" alone hid the difference between a host that refused HDR and a client that never asked for it, and the second is where you end up after fixing everything on the host: Nova's own Request HDR toggle is off by default. The line now reads "SDR (HDR not requested)", "SDR (host turned HDR off)" or "SDR (host encoder)", and the first names the setting to turn on. (papi-ux/polaris#686 follow-up)
-- The frame rate ladder goes past 120. Polaris now advertises up to 240 FPS for launches where it creates the display itself, and Nova's standard options stopped at 120 in three places, so a 144 or 165 Hz panel could only ask for its own rate through the Native entry. 144, 165 and 240 are standard options now, offered only where the panel can present them, in Play Setup's Frame Rate row and the settings list alike, and a saved choice from a faster panel lands on the fastest rate a slower one has. (papi-ux/polaris#686)
+**Your Space, Your Library**
+
+- Browse game posters in your selected Space, or open Steam Big Picture to sign in and choose a game.
+- See where you are playing and change Spaces from the same row as your game controls, Options and System.
+- Resume a session or leave it with a clear explanation of what will stop.
+- Keep touch and controller navigation within reach, including on smaller screens and with larger text.
+
+**Play Your Way**
+
+- Choose 144, 165 or 240 FPS when your display and host support them.
+- Match face buttons by label or position for each game, especially useful when switching between console layouts.
+- See the console and emulator alongside supported emulator games in your library.
+
+**Less Guesswork, More Playing**
+
+- Launch problems now show the host's explanation and suggested fix instead of a bare error code.
+- Play Setup explains why a stream is using SDR and points out when Request HDR is switched off.
+- Changing Spaces cancels an unfinished connection check, so a late reply cannot overwrite your new selection.
+
+**Before You Try Spaces**
+
+Spaces is an early preview for configured Polaris hosts. The public Docker runtime download is not available yet, and guided setup allows one active Space. Handheld audio remains under investigation. The [Spaces Guide](https://github.com/papi-ux/polaris/blob/v1.4.8/docs/spaces.md) explains setup and current limits. Ordinary streaming works as usual.
+
+Higher frame rates are targets, not performance guarantees. Update Polaris and Nova together for the new library and launch guidance.
 
 ## 1.4.7 - 2026-09-12
 

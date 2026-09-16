@@ -225,6 +225,7 @@ class NvHTTP @Throws(IOException::class) constructor(
         }
 
         details.uuid = getXmlString(serverInfo, "uniqueid", true)!!
+        details.spacesAvailable = getXmlString(serverInfo, "PolarisSpacesAvailable", false) == "1"
 
         val permStr = getXmlString(serverInfo, "Permission", false)
         if (permStr != null) {
@@ -674,6 +675,15 @@ class NvHTTP @Throws(IOException::class) constructor(
             .takeIf { it.isNotBlank() }
             ?.let { "&encoderBackend=" + URLEncoder.encode(it, "UTF-8") }
             ?: ""
+        val workerProfileParam = streamConfig.getWorkerProfileId().takeIf { it.isNotEmpty() }?.let {
+            require(streamConfig.getResolvedProfile() && streamConfig.getExpectedTopology() == "gamescope_stream") {
+                "A worker profile requires its resolved stream contract"
+            }
+            "&workerProfile=" + URLEncoder.encode(it, "UTF-8") +
+                streamConfig.getWorkerTarget().takeIf { target -> target.isNotEmpty() }?.let { target ->
+                    "&workerTarget=" + URLEncoder.encode(target, "UTF-8")
+                }.orEmpty()
+        }.orEmpty()
         val resolvedProfileParam = if (streamConfig.getResolvedProfile()) {
             val expectedTopology = streamConfig.getExpectedTopology()
             require(expectedTopology.isNotBlank()) {
@@ -722,6 +732,7 @@ class NvHTTP @Throws(IOException::class) constructor(
                 encoderBackendParam +
                 profilePreference +
                 resolvedProfileParam +
+                workerProfileParam +
                 "&localAudioPlayMode=" + (if (streamConfig.getPlayLocalAudio()) 1 else 0) +
                 "&surroundAudioInfo=" + streamConfig.getAudioConfiguration()!!.getSurroundAudioInfo() +
                 "&remoteControllersBitmap=" + streamConfig.getAttachedGamepadMask() +
@@ -975,7 +986,10 @@ class NvHTTP @Throws(IOException::class) constructor(
                     statusCode = 418
                     statusMsg = "Missing audio capture device. Reinstall GeForce Experience."
                 }
-                throw HostHttpResponseException(statusCode, statusMsg)
+                // Polaris says why it refused, as attributes Moonlight ignores.
+                val hostCode = xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "error_code")?.trim()?.takeIf { it.isNotEmpty() }
+                val hostAction = xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "error_action")?.trim()?.takeIf { it.isNotEmpty() }
+                throw HostHttpResponseException(statusCode, statusMsg, hostCode, hostAction)
             }
         }
 

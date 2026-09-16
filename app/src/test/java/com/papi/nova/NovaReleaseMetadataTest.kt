@@ -87,7 +87,7 @@ class NovaReleaseMetadataTest {
 
         assertTrue(build.contains("versionName \"1.4.8\""))
         assertTrue(build.contains("versionCode = 49"))
-        assertTrue(changelog.contains("## 1.4.8 - 2026-09-14"))
+        assertTrue(changelog.contains("## 1.4.8 - 2026-09-16"))
         assertTrue(changelog.contains("Steam Input remains manual and read-only."))
         assertTrue(changelog.contains("Polaris owns encoder probing, fallback, and launch policy"))
         assertTrue(releaseWorkflow.contains("python3 scripts/extract_release_notes.py"))

@@ -25,6 +25,8 @@ data class PolarisSessionStatus(
     val dynamicRange: Int = 0,
     val liveTuning: LiveTuningStatus? = null,
     val liveTuningPresent: Boolean = false,
+    /** Explicit unavailability in the versioned Spaces status contract; presentation only. */
+    val liveTuningUnavailable: Boolean = false,
     val adaptiveBitrateEnabled: Boolean = false,
     val adaptiveTargetBitrateKbps: Int = 0,
     val aiAutoQualityEnabled: Boolean = false,

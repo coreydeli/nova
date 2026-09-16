@@ -25,7 +25,7 @@ class NovaEncoderLaunchSourceGuardTest {
         assertTrue(helper.contains("gameIntent.putExtra(Game.EXTRA_ENCODER_BACKEND, encoderBackend)"))
         assertTrue(game.contains("NovaEncoderLaunchContract.honors("))
         assertTrue(game.contains("encoderBackend = encoderBackend)"))
-        assertTrue(game.contains(".setExpectedEncoder(if (launchResolvedProfileTrusted) encoderBackend else \"\")"))
+        assertTrue(game.contains(".setExpectedEncoder(if (launchResolvedProfileTrusted && workerLaunch == null) encoderBackend else \"\")"))
         assertTrue(nvhttp.contains("&encoderBackend="))
         assertTrue(nvhttp.contains("&expectedEncoder="))
         assertTrue(shortcut.contains("NovaEncoderBackendOverrides.loadAvailable("))

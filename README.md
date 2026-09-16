@@ -163,6 +163,8 @@ device, architecture, codec, HDR, sensor, and host notes.
 
 ## Documentation and project links
 
+- [Spaces In Nova](docs/spaces.md): open your assigned gaming Space and adjust its stream settings.
+
 - [Nova documentation](https://papi-ux.com/docs/nova/) · [Play Setup](https://papi-ux.com/docs/nova/play-setup/) · [Quick start](https://papi-ux.com/docs/nova/quickstart/) · [Compatibility](https://papi-ux.com/docs/nova/compatibility/)
 - [Roadmap](https://papi-ux.com/docs/roadmap/) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/papi-ux/nova/releases)
 - [Matrix community](https://matrix.to/#/#papi-ux:papi-ux.com) · [Issues](https://github.com/papi-ux/nova/issues) · [Discussions](https://github.com/papi-ux/nova/discussions) · [Source](https://github.com/papi-ux/nova)

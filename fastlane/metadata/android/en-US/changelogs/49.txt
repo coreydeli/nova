@@ -1,3 +1,7 @@
 Nova 1.4.8
 
-The frame rate list now offers 144, 165 and 240 where the panel can present them, matching a host that advertises up to 240 for the displays it creates. Play Setup says which kind of SDR you are getting: not requested, turned off on the host, or the host encoder. When it is your own Request HDR toggle, it names the setting.
+Browse your Space with game posters and Steam Big Picture. Space selection and library controls now share one row.
+
+Choose 144, 165 or 240 FPS on supported setups. Match controller buttons by label or position for each game. Get clearer launch errors and HDR guidance.
+
+Spaces is an early preview for configured Polaris hosts. Its public Docker runtime download is not available yet. Handheld audio remains under investigation.

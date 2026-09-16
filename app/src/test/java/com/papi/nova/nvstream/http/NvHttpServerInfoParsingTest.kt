@@ -168,4 +168,35 @@ class NvHttpServerInfoParsingTest {
 
         assertEquals("rtsp://host", NvHTTP.getXmlString(body, "sessionUrl0", false))
     }
+
+    @Test
+    fun aRefusedLaunchCarriesTheHostCodeAndAction() {
+        // polaris: every refused launch says why, as attributes Moonlight ignores.
+        val refused = """
+            <root status_code="503" status_message="No video encoder could start on this host. Check the host Doctor." error_code="encoder_probe_failed" error_action="Check the host Doctor.">
+              <gamesession>0</gamesession>
+            </root>
+        """.trimIndent()
+
+        try {
+            NvHTTP.getXmlString(StringReader(refused), "gamesession", true)
+            throw AssertionError("a 503 root must throw")
+        } catch (e: HostHttpResponseException) {
+            assertEquals(503, e.getErrorCode())
+            assertEquals("No video encoder could start on this host. Check the host Doctor.", e.getErrorMessage())
+            assertEquals("encoder_probe_failed", e.getHostCode())
+            assertEquals("Check the host Doctor.", e.getHostAction())
+        }
+
+        // A host that sends only the old attributes still parses, with nothing invented.
+        val plain = """<root status_code="503" status_message="Failed to initialize video capture/encoding."><gamesession>0</gamesession></root>"""
+        try {
+            NvHTTP.getXmlString(StringReader(plain), "gamesession", true)
+            throw AssertionError("a 503 root must throw")
+        } catch (e: HostHttpResponseException) {
+            assertEquals(503, e.getErrorCode())
+            assertNull(e.getHostCode())
+            assertNull(e.getHostAction())
+        }
+    }
 }

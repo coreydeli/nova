@@ -25,6 +25,7 @@ import com.papi.nova.preferences.PreferenceConfiguration
 import com.papi.nova.shared.polaris.model.PolarisGame
 import com.papi.nova.ui.AutoQualityProfilePreferences
 import com.papi.nova.ui.NovaEncoderBackendOverrides
+import com.papi.nova.ui.NovaFaceButtonLayoutOverrides
 import com.papi.nova.ui.NovaLaunchPreflight
 import com.papi.nova.ui.NovaLaunchStreamOverride
 import com.papi.nova.ui.NovaThemeManager
@@ -70,6 +71,7 @@ class ShortcutTrampoline : NovaActivity() {
         val mirrorDesktop: Boolean = false,
         val streamMode: String = "",
         val encoderBackend: String = "",
+        val faceButtonLayout: String = "",
         val streamWidth: Int = 0,
         val streamHeight: Int = 0,
         val streamFps: Float = 0f,
@@ -188,6 +190,7 @@ class ShortcutTrampoline : NovaActivity() {
                                                         streamFps = readyLaunchPlan.streamFps,
                                                         streamMode = readyLaunchPlan.streamMode,
                                                         encoderBackend = readyLaunchPlan.encoderBackend,
+                                                        faceButtonLayout = readyLaunchPlan.faceButtonLayout,
                                                     ),
                                                 )
 
@@ -674,6 +677,7 @@ class ShortcutTrampoline : NovaActivity() {
                     this,
                     polarisGame,
                 ).orEmpty(),
+                faceButtonLayout = NovaFaceButtonLayoutOverrides.load(this, polarisGame).orEmpty(),
             )
         } catch (e: Exception) {
             LimeLog.warning("Nova: Shortcut launch Polaris metadata lookup failed: ${e.message}")
@@ -697,13 +701,16 @@ class ShortcutTrampoline : NovaActivity() {
 
         return try {
             val apiClient = PolarisApiClient(this, activeAddress.address, details.httpsPort, serverCert)
-            val mangoHudSynced = apiClient.setMangoHud(polarisGame.id, polarisGame.mangohud)
+            val isWorkerProfile = com.papi.nova.manager.WorkerLaunchContract.isProfileApp(polarisGame.id)
+            val mangoHudSynced = isWorkerProfile || apiClient.setMangoHud(polarisGame.id, polarisGame.mangohud)
             if (!mangoHudSynced) {
                 LimeLog.warning("Nova: Shortcut launch MangoHUD state sync failed; continuing launch")
             }
 
             val clientSettings = apiClient.getClientSettings()
-            val encoderBackend = if (clientSettings != null) {
+            val encoderBackend = if (isWorkerProfile) {
+                ""
+            } else if (clientSettings != null) {
                 NovaEncoderBackendOverrides.loadAvailable(this, polarisGame, clientSettings).orEmpty()
             } else {
                 // Preserve the explicit choice when settings could not be fetched. Game's
@@ -752,7 +759,7 @@ class ShortcutTrampoline : NovaActivity() {
             val launchFps = StreamSyncManager.resolveAutoSafeTargetFps(preferences.fps, composed)
             val launchBitrateKbps = StreamSyncManager.resolveAutoSafeBitrateKbps(requestedBitrateKbps, composed)
 
-            syncShortcutLaunchPreflightSettings(
+            if (!isWorkerProfile) syncShortcutLaunchPreflightSettings(
                 apiClient = apiClient,
                 clientSettings = clientSettings,
                 usesVirtualDisplay = launchUsesVirtualDisplay,
@@ -773,6 +780,7 @@ class ShortcutTrampoline : NovaActivity() {
                 mirrorDesktop = launchMirrorDesktop,
                 streamMode = launchMode,
                 encoderBackend = encoderBackend,
+                faceButtonLayout = launchPlan.faceButtonLayout,
                 streamWidth = launchResolution.width,
                 streamHeight = launchResolution.height,
                 streamFps = launchFps,
@@ -807,6 +815,7 @@ class ShortcutTrampoline : NovaActivity() {
                 streamFps = readyLaunchPlan.streamFps,
                 streamMode = readyLaunchPlan.streamMode,
                 encoderBackend = readyLaunchPlan.encoderBackend,
+                faceButtonLayout = readyLaunchPlan.faceButtonLayout,
             )
 
             runOnUiThread {

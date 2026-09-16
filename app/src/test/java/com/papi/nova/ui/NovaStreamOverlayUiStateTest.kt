@@ -5,6 +5,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NovaStreamOverlayUiStateTest {
+
+    @Test fun spaceProgressDoesNotClaimUnobservedDesktopOrSteamReadiness() {
+        val starting = NovaSessionProgressUiState.fromSpace("space_starting")!!
+        val video = NovaSessionProgressUiState.fromSpace("video stream establishment")!!
+        assertEquals("Starting Space", starting.title)
+        assertEquals("Connecting Video", video.title)
+        assertTrue(starting.indeterminate)
+        assertTrue(video.completedStages.isEmpty())
+        assertEquals(null, NovaSessionProgressUiState.fromSpace("streaming"))
+        assertEquals(null, NovaSessionProgressUiState.fromSpace("cage_starting"))
+        assertEquals("Waiting For Picture", NovaSessionProgressUiState.fromSpace("input_ready")!!.title)
+    }
     @Test
     fun reconnectStateFormatsAttemptText() {
         val state = NovaReconnectOverlayState(attempt = 2, maxAttempts = 5)

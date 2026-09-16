@@ -468,6 +468,7 @@ class NovaQuickMenu(private val game: Game) : Game.GameMenuCallbacks {
                 quickKeys = quickKeys,
                 status = sessionStatus,
                 apiAvailable = apiClient != null,
+                spaceSession = game.isSpaceSession(),
                 hostStateUnavailable = hostStateUnavailable,
                 liveTuningPending = liveTuningPending,
                 adaptiveSupported = adaptiveSupported,

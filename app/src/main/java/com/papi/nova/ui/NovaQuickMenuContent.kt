@@ -486,6 +486,7 @@ private fun NovaQuickMenuHeaderButton(
     callbacks: NovaQuickMenuCallbacks,
     modifier: Modifier = Modifier
 ) {
+    if (!action.visible) return
     NovaActionButton(
         text = action.label,
         onClick = { callbacks.perform(action) },

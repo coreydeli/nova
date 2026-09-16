@@ -42,6 +42,11 @@ class NvConnection(
     serverCert: X509Certificate?,
 ) {
     private val context: ConnectionContext = ConnectionContext()
+
+    /** The host's explanation for the last refused launch, for the launch sheet; null when it sent none. */
+    @Volatile
+    var lastHostRefusal: HostRefusal? = null
+        private set
     private val isMonkey: Boolean
 
     init {
@@ -163,6 +168,7 @@ class NvConnection(
 
     @Throws(XmlPullParserException::class, IOException::class)
     private fun startApp(): Boolean {
+        lastHostRefusal = null
         val streamConfig = context.streamConfig!!
         val listener = context.connListener!!
         val h = NvHTTP(context.serverAddress!!, context.httpsPort, uniqueId, context.serverCert, cryptoProvider)
@@ -307,6 +313,7 @@ class NvConnection(
                     return quitAndLaunch(h, context)
                 }
             } catch (e: HostHttpResponseException) {
+                lastHostRefusal = HostRefusal.from(e)
                 if (e.getErrorCode() == 470) {
                     listener.displayMessage(
                         "This session wasn't started by this device," +
@@ -377,6 +384,7 @@ class NvConnection(
                 return false
             }
         } catch (e: HostHttpResponseException) {
+            lastHostRefusal = HostRefusal.from(e)
             if (e.getErrorCode() == 470 || e.getErrorCode() == 599) {
                 listener.displayMessage(
                     "This session wasn't started by this device," +
@@ -442,12 +450,14 @@ class NvConnection(
         }
 
         val app = streamConfig.getApp()!!
+        if (streamConfig.getWorkerProfileId().isNotEmpty()) listener.stageStarting("space_starting")
         if (!h.launchApp(context, "launch", app.appUUID, app.appId, context.negotiatedHdr, false)) {
             listener.displayMessage("Failed to launch application")
             return false
         }
 
         LimeLog.info("Launched new game session")
+        if (streamConfig.getWorkerProfileId().isNotEmpty()) listener.stageStarting("space_connecting")
 
         return true
     }
@@ -479,6 +489,7 @@ class NvConnection(
                     }
                     connectionListener.stageComplete(appName)
                 } catch (e: HostHttpResponseException) {
+                    lastHostRefusal = HostRefusal.from(e)
                     e.printStackTrace()
                     connectionListener.displayMessage(e.message)
                     retry = connectionListener.stageFailed(appName, 0, e.getErrorCode())
@@ -557,6 +568,7 @@ class NvConnection(
                     context.videoCapabilities,
                     streamConfig.getColorSpace(),
                     streamConfig.getColorRange(),
+                    streamConfig.getWorkerProfileId().isNotEmpty(),
                 )
                 if (ret != 0) {
                     connectionAllowed.release()

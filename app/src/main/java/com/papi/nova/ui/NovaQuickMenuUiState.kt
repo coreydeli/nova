@@ -200,6 +200,7 @@ data class NovaQuickMenuUiState(
             fallbackBitrateKbps: Int,
             fallbackTargetFps: Double,
             doctorReceipt: DoctorActionReceipt? = null,
+            spaceSession: Boolean = false,
             // Static per locale. The host builds it once per open and hands it back in, so
             // a refresh after every tap does not rebuild nine identical rows from resources.
             quickKeys: List<NovaQuickMenuAction> = quickKeyActions(context)
@@ -450,10 +451,12 @@ data class NovaQuickMenuUiState(
                 healthTone = healthTone,
                 disconnectAction = NovaQuickMenuAction(
                     id = NovaQuickMenuActionId.DISCONNECT,
-                    label = context.getString(R.string.game_menu_disconnect)
+                    label = if (spaceSession) "Leave Space" else context.getString(R.string.game_menu_disconnect),
+                    destructive = spaceSession,
                 ),
                 endAction = NovaQuickMenuAction(
                     id = NovaQuickMenuActionId.END_STREAM,
+                    visible = !spaceSession,
                     label = when {
                         viewerSession -> context.getString(R.string.nova_quick_menu_leave)
                         status?.isShuttingDown == true -> context.getString(R.string.nova_quick_menu_ending)

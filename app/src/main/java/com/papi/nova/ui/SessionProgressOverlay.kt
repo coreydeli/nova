@@ -18,13 +18,22 @@ class SessionProgressOverlay(private val activity: Activity) {
     private var overlayView: ComposeView? = null
     private var backgroundBlurLeases: List<NovaMenuBlur.BlurLease> = emptyList()
     private val overlayState = mutableStateOf(NovaSessionProgressUiState.from("initializing"))
+    private var spaceSession = false
+
+    fun setSpaceSession(enabled: Boolean) {
+        activity.runOnUiThread {
+            spaceSession = enabled
+            if (enabled) overlayState.value = NovaSessionProgressUiState.fromSpace("initializing")!!
+        }
+    }
 
     fun show() {
         activity.runOnUiThread {
             if (overlayView != null) {
                 return@runOnUiThread
             }
-            overlayState.value = NovaSessionProgressUiState.from("initializing")
+            overlayState.value = if (spaceSession) NovaSessionProgressUiState.fromSpace("initializing")!!
+                else NovaSessionProgressUiState.from("initializing")
             val composeView = ComposeView(activity).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
                 NovaMenuBlur.releaseOnUnexpectedDetach(this) {
@@ -57,7 +66,8 @@ class SessionProgressOverlay(private val activity: Activity) {
 
     fun updateState(state: String, message: String = "") {
         activity.runOnUiThread {
-            val nextState = NovaSessionProgressUiState.from(state, message)
+            val nextState = if (spaceSession) NovaSessionProgressUiState.fromSpace(state) ?: return@runOnUiThread
+                else NovaSessionProgressUiState.from(state, message)
             if (nextState.progressFraction >= overlayState.value.progressFraction) {
                 overlayState.value = nextState
             }

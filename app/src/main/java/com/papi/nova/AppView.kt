@@ -489,10 +489,11 @@ class AppView : NovaActivity(), AdapterFragmentCallbacks {
 
         val profilesButton = findViewById<ExtendedFloatingActionButton>(R.id.profilesButton) ?: return
         val activeProfileName = ProfilesManager.getInstance().getActiveName()
+        profilesButton.contentDescription = getString(R.string.profile_manager_choose_profile)
         if (activeProfileName.isEmpty()) {
             profilesButton.shrink()
         } else {
-            profilesButton.text = activeProfileName
+            profilesButton.text = getString(R.string.profile_manager_preset_name, activeProfileName)
             profilesButton.extend()
         }
     }

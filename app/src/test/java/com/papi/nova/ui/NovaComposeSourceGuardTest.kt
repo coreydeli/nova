@@ -1556,11 +1556,11 @@ class NovaComposeSourceGuardTest {
         )
         assertTrue(
             "stale launch recovery should clear on refresh, detail navigation, and valid launch/resume paths",
-            source.contains("loadErrorMessage = null\n        launchErrorMessage = null") &&
-                source.contains("private fun showGameDetail(game: PolarisGame) {\n        launchErrorMessage = null") &&
-                source.contains("private fun launchGame(") &&
-                source.contains("private fun resumeActiveSession(") &&
-                source.split("launchErrorMessage = null").size >= 5
+            source.blockStartingAt("private fun loadGames(").contains("launchErrorMessage = null") &&
+                source.contains("private fun showGameDetail(game: PolarisGame) = showDetail(game)") &&
+                source.blockStartingAt("private fun showDetail(").contains("launchErrorMessage = null") &&
+                source.blockStartingAt("private fun launchGame(").contains("launchErrorMessage = null") &&
+                source.blockStartingAt("private fun resumeActiveSession(").contains("launchErrorMessage = null")
         )
     }
 
@@ -3374,5 +3374,31 @@ class NovaComposeSourceGuardTest {
             "the handoff should land on the host Audio/Video settings section",
             library.contains("/#/config#av")
         )
+    }
+
+    @Test
+    fun emulatorSourceIsLabelledInEveryLegacyMap() {
+        listOf(
+            "src/main/java/com/papi/nova/nvstream/http/NvApp.kt",
+            "src/main/java/com/papi/nova/ui/NovaLibraryActivity.kt",
+            "src/main/java/com/papi/nova/ui/NovaLibraryUiState.kt",
+        ).forEach { path ->
+            assertTrue("$path must label the emulator source", readSource(path).contains("\"emulator\" -> \"Emulator\""))
+        }
+        val legacyApp = readSource("src/main/java/com/papi/nova/nvstream/http/NvApp.kt")
+        assertTrue("the legacy grid must prefer the host's platform label", legacyApp.contains("platformLabelFromServer.ifBlank"))
+        assertTrue("the legacy grid must prefer the host's runtime label", legacyApp.contains("runtimeLabelFromServer.ifBlank"))
+    }
+
+    @Test
+    fun perGameFaceButtonLayoutReachesTheLaunchBeforeThePadsAreBuilt() {
+        val game = readSource("src/main/java/com/papi/nova/Game.kt")
+        val applied = game.indexOf("NovaFaceButtonLayoutOverrides.flipFaceButtons(")
+        val handler = game.indexOf("controllerHandler = ControllerHandler(")
+        assertTrue("Game must apply the per-game face button layout", applied >= 0)
+        assertTrue("Game must build ControllerHandler after applying the layout", handler > applied)
+        assertTrue(readSource("src/main/java/com/papi/nova/utils/ServerHelper.kt").contains("Game.EXTRA_FACE_BUTTON_LAYOUT"))
+        assertTrue(readSource("src/main/java/com/papi/nova/ui/NovaGameDetailActivity.kt").contains("row = NovaPlaySetupRow.FACE_BUTTONS,"))
+        assertTrue(readSource("src/main/java/com/papi/nova/ShortcutTrampoline.kt").contains("faceButtonLayout = readyLaunchPlan.faceButtonLayout"))
     }
 }

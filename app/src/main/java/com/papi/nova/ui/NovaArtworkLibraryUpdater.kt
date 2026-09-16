@@ -10,6 +10,7 @@ import com.papi.nova.api.PolarisArtworkLibraryUpdateUnavailableException
 import com.papi.nova.api.PolarisArtworkMatchCandidate
 import com.papi.nova.api.PolarisArtworkUpdateResult
 import com.papi.nova.api.PolarisArtworkUpdateStatus
+import com.papi.nova.manager.WorkerLaunchContract
 import com.papi.nova.shared.polaris.model.PolarisGame
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -68,10 +69,16 @@ class NovaArtworkLibraryUpdater(
     ): Summary = coroutineScope {
         val uniqueGames = games.distinctBy { it.id }
         val customGames = uniqueGames.filter { it.artwork?.override?.active == true }
-        val eligibleGames = uniqueGames.filterNot { it.artwork?.override?.active == true }
-        val completed = AtomicInteger(customGames.size)
+        // Steam Big Picture uses bundled launcher artwork, with no provider game ID.
+        val bundledGames = uniqueGames.filter { game ->
+            val space = game.space
+            game.artwork?.override?.active != true && space?.target == "big-picture-v1" &&
+                WorkerLaunchContract.libraryIdentity(game.id) == (space.id to space.target)
+        }
+        val eligibleGames = uniqueGames - customGames.toSet() - bundledGames.toSet()
+        val completed = AtomicInteger(customGames.size + bundledGames.size)
         val updated = AtomicInteger(0)
-        val healthy = AtomicInteger(0)
+        val healthy = AtomicInteger(bundledGames.size)
         val customPreserved = AtomicInteger(customGames.size)
         val failed = AtomicInteger(0)
         val callbackLock = Mutex()

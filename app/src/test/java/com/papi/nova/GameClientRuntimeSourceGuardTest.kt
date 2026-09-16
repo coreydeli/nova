@@ -143,8 +143,9 @@ class GameClientRuntimeSourceGuardTest {
         assertTrue(
             "a trusted deterministic FPS must be used exactly by both /launch and the stream connection",
             game.contains("chosenFrameRate = autoSafeTargetFps") &&
-                game.contains("if (!launchResolvedProfileTrusted &&\nprefConfig!!.framePacing ==") &&
-                game.contains("if (!launchResolvedProfileTrusted && prefConfig!!.framePacingWarpFactor > 0)")
+                game.contains("val exactMediaCadence = launchResolvedProfileTrusted || workerLaunch != null") &&
+                game.contains("if (!exactMediaCadence &&\nprefConfig!!.framePacing ==") &&
+                game.contains("if (!exactMediaCadence && prefConfig!!.framePacingWarpFactor > 0)")
         )
         assertTrue(
             "connection recovery must use the same lifecycle-bound capability scope as Doctor sampling",
