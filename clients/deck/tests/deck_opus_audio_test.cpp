@@ -143,14 +143,23 @@ int main(int argc, char** argv) {
             std::vector<float> expected(frames * channels);
             CHECK(opus_multistream_decode_float(reference,
                 reinterpret_cast<unsigned char*>(packet.data()), packet.size(), expected.data(), frames, 0) == frames);
-            opus_multistream_decoder_destroy(reference);
             CHECK(sink.pcm == expected);
             CHECK(audio.lifecycle().decodedFrames == frames);
             CHECK(audio.lifecycle().queuedFrames == frames);
             CHECK(audio.lifecycle().submittedFrames == 0); // The recorder has no playback hardware.
+            // The real transport requests PLC with (nullptr, 0) on packet loss.
+            CHECK(opus_multistream_decode_float(reference, nullptr, 0, expected.data(), frames, 0) == frames);
+            opus_multistream_decoder_destroy(reference);
+            audio.decodeAndPlaySample(nullptr, 0);
+            CHECK(sink.pcm.size() == static_cast<std::size_t>(frames * channels * 2));
+            CHECK(std::equal(expected.begin(), expected.end(), sink.pcm.begin() + frames * channels));
+            CHECK(audio.lifecycle().decodedFrames == frames * 2);
+            CHECK(audio.lifecycle().concealedFrames == frames);
+            CHECK(audio.lifecycle().queuedFrames == frames * 2);
             audio.stop();
             audio.decodeAndPlaySample(packet.data(), packet.size());
-            CHECK(audio.lifecycle().sampleCalls == 1);
+            audio.decodeAndPlaySample(nullptr, 0);
+            CHECK(audio.lifecycle().sampleCalls == 2);
             audio.cleanup();
             audio.cleanup();
             CHECK(!audio.lifecycle().active && !audio.lifecycle().outputReady);
@@ -164,7 +173,7 @@ int main(int argc, char** argv) {
     DeckPipeWireAudio audio(sink);
     auto config = stereoConfig();
     CHECK(audio.init(AUDIO_CONFIGURATION_STEREO, nullptr, nullptr, 0) < 0);
-    for (int bad = 0; bad < 10; ++bad) {
+    for (int bad = 0; bad < 11; ++bad) {
         auto invalid = config;
         switch (bad) {
         case 0: invalid.sampleRate = 44100; break;
@@ -177,6 +186,7 @@ int main(int argc, char** argv) {
         case 7: invalid.mapping[0] = 4; break;
         case 8: invalid.streams = 3; break;
         case 9: invalid.coupledStreams = -1; break;
+        case 10: invalid.samplesPerFrame = 121; break;
         }
         CHECK(audio.init(AUDIO_CONFIGURATION_STEREO, &invalid, nullptr, 0) < 0);
         CHECK(!audio.lifecycle().outputReady);

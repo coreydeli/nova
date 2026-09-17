@@ -73,7 +73,7 @@ jobs:
             git gcc cmake ninja pkgconf \
             qt6-base qt6-declarative \
             ffmpeg libva libdrm mesa \
-            libpulse pipewire opus openssl
+            libpulse pipewire pipewire-audio opus openssl
 
       - uses: actions/checkout@v5
         with:

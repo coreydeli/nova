@@ -47,6 +47,7 @@ int DeckPipeWireAudio::init(const int audioConfiguration,
     lifecycle_.sampleCalls = 0;
     lifecycle_.lastSampleLength = 0;
     lifecycle_.decodedFrames = 0;
+    lifecycle_.concealedFrames = 0;
     lifecycle_.queuedFrames = 0;
     lifecycle_.decodeErrors = 0;
     lifecycle_.audioConfiguration = audioConfiguration;
@@ -60,7 +61,8 @@ int DeckPipeWireAudio::init(const int audioConfiguration,
         || config->streams < 1 || config->streams > config->channelCount
         || config->coupledStreams < 0 || config->coupledStreams > config->streams
         || config->streams + config->coupledStreams > config->channelCount
-        || config->samplesPerFrame < 1 || config->samplesPerFrame > kMaxSamplesPerChannel) {
+        || config->samplesPerFrame < 120 || config->samplesPerFrame > kMaxSamplesPerChannel
+        || config->samplesPerFrame % 120 != 0) {
         lifecycle_.lastError = "Unsupported audio configuration";
         return -1;
     }
@@ -117,20 +119,26 @@ void DeckPipeWireAudio::cleanup() {
 
 void DeckPipeWireAudio::decodeAndPlaySample(char* sampleData, const int sampleLength) {
     const std::lock_guard lock(lifecycleMutex_);
-    if (!ready_ || !lifecycle_.active || !sampleData || sampleLength <= 0) {
+    // moonlight-common-c reports a missing packet with exactly (nullptr, 0).
+    // Generate only the negotiated packet duration, not the maximum decode size.
+    const bool concealLoss = sampleData == nullptr && sampleLength == 0;
+    if (!ready_ || !lifecycle_.active || (!concealLoss && (!sampleData || sampleLength <= 0))) {
         return;
     }
     ++lifecycle_.sampleCalls;
     lifecycle_.lastSampleLength = sampleLength;
     const int frames = opus_multistream_decode_float(decoder_,
         reinterpret_cast<const unsigned char*>(sampleData), sampleLength,
-        pcm_.data(), kMaxSamplesPerChannel, 0);
+        pcm_.data(), concealLoss ? lifecycle_.samplesPerFrame : kMaxSamplesPerChannel, 0);
     if (frames < 0) {
         ++lifecycle_.decodeErrors;
         lifecycle_.lastError = "Invalid Opus audio packet";
         return;
     }
     lifecycle_.decodedFrames += frames;
+    if (concealLoss) {
+        lifecycle_.concealedFrames += frames;
+    }
     if (output_->write(std::span<const float>(pcm_.data(), static_cast<std::size_t>(frames * channels_)))) {
         lifecycle_.queuedFrames += frames;
     } else if (!output_->stats().available) {

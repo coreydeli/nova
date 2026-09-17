@@ -414,6 +414,7 @@ struct DeckAudioLifecycle {
     int lastSampleLength = 0;
     bool networkStartAllowed = false;
     std::uint64_t decodedFrames = 0;
+    std::uint64_t concealedFrames = 0;
     std::uint64_t queuedFrames = 0;
     std::uint64_t submittedFrames = 0;
     std::uint64_t silenceFrames = 0;

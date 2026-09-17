@@ -1425,6 +1425,7 @@ int nativeLaunchCommand(
               << " lastSampleLength=" << audio.lastSampleLength
               << " audioConfiguration=" << audio.audioConfiguration
               << " decodedFrames=" << audio.decodedFrames
+              << " concealedFrames=" << audio.concealedFrames
               << " queuedFrames=" << audio.queuedFrames
               << " submittedFrames=" << audio.submittedFrames
               << " silenceFrames=" << audio.silenceFrames
