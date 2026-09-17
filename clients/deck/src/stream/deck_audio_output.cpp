@@ -210,9 +210,12 @@ private:
         plane.chunk->stride = sizeof(float) * channels;
         plane.chunk->size = output.size_bytes();
         queued->size = frames;
-        self.submittedFrames_.fetch_add(copied / channels, std::memory_order_relaxed);
-        self.silenceFrames_.fetch_add((output.size() - copied) / channels, std::memory_order_relaxed);
-        pw_stream_queue_buffer(self.stream_, queued);
+        if (pw_stream_queue_buffer(self.stream_, queued) >= 0) {
+            self.submittedFrames_.fetch_add(copied / channels, std::memory_order_relaxed);
+            self.silenceFrames_.fetch_add((output.size() - copied) / channels, std::memory_order_relaxed);
+        } else {
+            self.available_.store(false, std::memory_order_relaxed);
+        }
     }
 
     DeckAudioFormat format_{};
