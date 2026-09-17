@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +28,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.unit.Constraints
+import kotlin.math.roundToInt
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -74,6 +82,12 @@ internal fun NovaPlaySetupBody(
     introMaxLines: Int = 2,
     /** The read column's head; host scope reads differently than a game does. */
     readTitle: String? = null,
+    /**
+     * The height the body has. Side by side, the read column fits itself into it: its lines
+     * are not a stop on the d-pad, so the panel's scroll, which follows focus, could never bring
+     * a cut line into view.
+     */
+    fitHeight: Dp = Dp.Unspecified,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         // A phone in portrait has no room for two columns, and stacking them keeps the
@@ -92,6 +106,7 @@ internal fun NovaPlaySetupBody(
                     introMaxLines = introMaxLines,
                     modifier = Modifier.width(NOVA_PLAY_SETUP_READ_WIDTH).fillMaxHeight(),
                     readTitle = readTitle,
+                    fitHeight = fitHeight,
                 )
                 Spacer(modifier = Modifier.width(NOVA_PLAY_SETUP_GUTTER))
                 NovaPlaySetupActColumn(rows, comparison, Modifier.weight(1f))
@@ -100,44 +115,113 @@ internal fun NovaPlaySetupBody(
     }
 }
 
-/** What will happen, and where each part of it came from. Read, never operated. */
+/**
+ * What will happen, and where each part of it came from. Read, never operated.
+ *
+ * Given a height, it fits into it. Nothing here is a stop on the d-pad, so the panel's scroll,
+ * which follows focus, could never reach a line cut off at the bottom: on the Retroid a Space
+ * launch printed its host profile under the hint bar with no way to see it. The column measures
+ * its own text and gives up prose first, then the detail under each fact, a line at a time, and
+ * never a fact's value.
+ */
 @Composable
 private fun NovaPlaySetupReadColumn(
     plan: NovaPlaySetupPlan,
     introMaxLines: Int,
     modifier: Modifier = Modifier,
     readTitle: String? = null,
+    fitHeight: Dp = Dp.Unspecified,
 ) {
     val colors = LocalNovaComposeColors.current
-    Column(modifier = modifier) {
-        NovaPlaySetupColumnHead(readTitle ?: stringResource(R.string.nova_play_setup_what_will_happen))
-        Text(
-            text = plan.mode,
-            color = colors.textPrimary,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.02).em,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        plan.lines.forEachIndexed { index, line ->
+    BoxWithConstraints(modifier = modifier) {
+        val fit = rememberNovaPlaySetupReadFit(plan, introMaxLines, maxWidth, fitHeight)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            NovaPlaySetupColumnHead(readTitle ?: stringResource(R.string.nova_play_setup_what_will_happen))
             Text(
-                text = line,
-                // The last line is the part nobody asked for but everyone wants to know:
-                // whether anything outside this game is about to be touched.
-                color = if (index == plan.lines.lastIndex) colors.textMuted else colors.textSecondary,
-                fontSize = 14.sp,
-                lineHeight = 19.sp,
-                modifier = Modifier.padding(top = 6.dp),
-                maxLines = introMaxLines,
+                text = plan.mode,
+                color = colors.textPrimary,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.02).em,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
+            plan.lines.forEachIndexed { index, line ->
+                Text(
+                    text = line,
+                    // The last line is the part nobody asked for but everyone wants to know:
+                    // whether anything outside this game is about to be touched.
+                    color = if (index == plan.lines.lastIndex) colors.textMuted else colors.textSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
+                    modifier = Modifier.padding(top = 6.dp),
+                    maxLines = fit.lineMaxLines.getOrElse(index) { introMaxLines },
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
-        if (plan.facts.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(20.dp))
-            NovaPlaySetupRule()
-            plan.facts.forEach { NovaPlaySetupFact(it) }
+            if (plan.facts.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                NovaPlaySetupRule()
+                plan.facts.forEachIndexed { index, fact ->
+                    NovaPlaySetupFact(fact, detailMaxLines = fit.detailMaxLines.getOrElse(index) { Int.MAX_VALUE })
+                }
+            }
+        }
+    }
+}
+
+/** The line limits that fit this plan into [fitHeight]; everything it needs when there is no height to fit. */
+@Composable
+private fun rememberNovaPlaySetupReadFit(
+    plan: NovaPlaySetupPlan,
+    introMaxLines: Int,
+    width: Dp,
+    fitHeight: Dp,
+): NovaPlaySetupReadFit {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val base = LocalTextStyle.current
+    return remember(plan, introMaxLines, width, fitHeight, density, base) {
+        val unfitted = NovaPlaySetupReadFit(
+            lineMaxLines = List(plan.lines.size) { introMaxLines },
+            detailMaxLines = List(plan.facts.size) { Int.MAX_VALUE },
+        )
+        if (fitHeight == Dp.Unspecified || fitHeight <= 0.dp || width == Dp.Infinity || width <= NOVA_PLAY_SETUP_FACT_KEY) {
+            return@remember unfitted
+        }
+        with(density) {
+            fun measure(text: String, style: TextStyle, maxWidth: Dp): NovaPlaySetupMeasuredText {
+                if (text.isBlank()) return NovaPlaySetupMeasuredText(emptyList())
+                val layout = measurer.measure(
+                    text = text,
+                    style = style,
+                    constraints = Constraints(maxWidth = maxWidth.roundToPx().coerceAtLeast(1)),
+                )
+                return NovaPlaySetupMeasuredText(List(layout.lineCount) { layout.getLineBottom(it).roundToInt() })
+            }
+            val lineStyle = base.merge(TextStyle(fontSize = 14.sp, lineHeight = 19.sp))
+            val valueStyle = base.merge(TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium))
+            val detailStyle = base.merge(TextStyle(fontSize = 11.sp, lineHeight = 15.sp))
+            val valueWidth = width - NOVA_PLAY_SETUP_FACT_KEY
+            val fixed = NOVA_PLAY_SETUP_COLUMN_HEAD + NOVA_PLAY_SETUP_MODE_LINE +
+                (if (plan.facts.isNotEmpty()) NOVA_PLAY_SETUP_RULE_BLOCK else 0.dp)
+            novaPlaySetupFitReadColumn(
+                available = (fitHeight - NOVA_PLAY_SETUP_SLACK).roundToPx(),
+                fixed = fixed.roundToPx(),
+                lineGap = 6.dp.roundToPx(),
+                lines = plan.lines.map { measure(it, lineStyle, width) },
+                lineCap = introMaxLines,
+                factChrome = 10.dp.roundToPx(),
+                detailGap = 4.dp.roundToPx(),
+                keyMin = NOVA_PLAY_SETUP_FACT_KEY_MIN.roundToPx(),
+                facts = plan.facts.map {
+                    NovaPlaySetupMeasuredFact(
+                        value = measure(it.value, valueStyle, valueWidth),
+                        detail = measure(it.detail, detailStyle, valueWidth),
+                    )
+                },
+            )
         }
     }
 }
@@ -166,7 +250,7 @@ private fun NovaPlaySetupActColumn(
  * down one edge instead of hunting for where each one starts.
  */
 @Composable
-private fun NovaPlaySetupFact(fact: NovaPlaySetupFact) {
+private fun NovaPlaySetupFact(fact: NovaPlaySetupFact, detailMaxLines: Int = Int.MAX_VALUE) {
     val colors = LocalNovaComposeColors.current
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Text(
@@ -198,6 +282,8 @@ private fun NovaPlaySetupFact(fact: NovaPlaySetupFact) {
                     color = colors.textMuted,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,
+                    maxLines = detailMaxLines,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -514,6 +600,60 @@ internal data class NovaPlaySetupRowState(
 )
 
 /**
+ * Where this game opens, as the one control that sets it.
+ *
+ * The places used to be drawn twice: a Change Space row whose A cycled through them, and the
+ * legend under the rows restating the same places as cards. Two ways to draw one choice is what
+ * LaunchControls was removed for. The cards are the control now, each a stop on the d-pad and a
+ * tap target, and the place the game opens in takes first focus so the cursor starts where the
+ * game will run. The legend below goes back to explaining only the rows. [status] is said above
+ * the cards only when there is something to say: a change in flight, or why it failed.
+ */
+@Composable
+internal fun NovaPlaySetupDestinations(
+    title: String,
+    status: String,
+    options: List<NovaPlaySetupOption>,
+    autoFocus: Boolean,
+) {
+    val colors = LocalNovaComposeColors.current
+    val focusIndex = options.indexOfFirst { it.current && it.enabled && it.onSelect != null }
+        .takeIf { it >= 0 }
+        ?: options.indexOfFirst { it.enabled && it.onSelect != null }
+    Column(modifier = Modifier.fillMaxWidth().testTag("nova-play-setup-destinations")) {
+        NovaPlaySetupColumnHead(title)
+        if (status.isNotBlank()) {
+            Text(
+                text = status,
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+        ) {
+            options.forEachIndexed { index, option ->
+                NovaSteamChoiceRow(
+                    label = option.label,
+                    caption = option.consequence,
+                    enabled = option.enabled,
+                    onClick = option.onSelect,
+                    selected = option.current,
+                    autoFocus = autoFocus && index == focusIndex,
+                    describeCaption = true,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
+        }
+    }
+}
+
+/**
  * How much of the legend the column can afford, and how much prose the plan can.
  *
  * Both are a function of how many rows the host produced: a host advertising a display
@@ -522,9 +662,15 @@ internal data class NovaPlaySetupRowState(
  * spends what is actually there -- three lines of consequence where there is room for
  * three, one where there is room for one.
  */
-internal fun novaPlaySetupConsequenceLines(availableHeight: Dp, rowCount: Int): Int {
+internal fun novaPlaySetupConsequenceLines(
+    availableHeight: Dp,
+    rowCount: Int,
+    /** Where this game opens is drawn above the rows, with a head of its own. */
+    destinations: Boolean = false,
+): Int {
     if (availableHeight <= 0.dp) return 2
     val used = NOVA_PLAY_SETUP_COLUMN_HEAD +
+        (if (destinations) NOVA_PLAY_SETUP_COLUMN_HEAD + NOVA_PLAY_SETUP_DESTINATION_STRIDE else 0.dp) +
         (NOVA_PLAY_SETUP_ROW_STRIDE * rowCount) +
         NOVA_PLAY_SETUP_LEGEND_GAP +
         NOVA_PLAY_SETUP_COLUMN_HEAD +
@@ -543,6 +689,84 @@ internal fun novaPlaySetupIntroLines(availableHeight: Dp, factCount: Int): Int {
     val room = availableHeight - used
     if (room <= 0.dp) return 1
     return (room / NOVA_PLAY_SETUP_INTRO_LINE).toInt().coerceIn(1, 4)
+}
+
+/** A text's bottom edge after each of its lines, in pixels, as measured at its column width. */
+internal class NovaPlaySetupMeasuredText(private val lineBottoms: List<Int>) {
+    val lineCount: Int get() = lineBottoms.size
+
+    fun height(maxLines: Int): Int =
+        if (lineBottoms.isEmpty() || maxLines <= 0) 0 else lineBottoms[minOf(maxLines, lineBottoms.size) - 1]
+}
+
+internal class NovaPlaySetupMeasuredFact(
+    val value: NovaPlaySetupMeasuredText,
+    val detail: NovaPlaySetupMeasuredText,
+)
+
+/** How many lines each plan line and each fact detail may use; Int.MAX_VALUE is all it needs. */
+internal data class NovaPlaySetupReadFit(
+    val lineMaxLines: List<Int>,
+    val detailMaxLines: List<Int>,
+)
+
+/**
+ * Trim the read column until it fits [available], one line at a time, and stop the moment it does.
+ *
+ * Prose goes before facts: the plan's last line, the opening sentence, down to two lines, then
+ * every fact's detail to two, then the sentence to one, the details to one, and every plan line
+ * to one. The longest part gives a line first, so no single detail collapses while another keeps
+ * its length. A fact's value is never trimmed; it is the fact. When even that is not enough the
+ * column keeps one line of everything and the panel's scroll remains the fallback.
+ */
+internal fun novaPlaySetupFitReadColumn(
+    available: Int,
+    fixed: Int,
+    lineGap: Int,
+    lines: List<NovaPlaySetupMeasuredText>,
+    lineCap: Int,
+    factChrome: Int,
+    detailGap: Int,
+    keyMin: Int,
+    facts: List<NovaPlaySetupMeasuredFact>,
+): NovaPlaySetupReadFit {
+    val lineMax = lines.map { minOf(lineCap.coerceAtLeast(1), it.lineCount.coerceAtLeast(1)) }.toMutableList()
+    val detailMax = facts.map { it.detail.lineCount }.toMutableList()
+    fun total(): Int {
+        var sum = fixed
+        lines.forEachIndexed { index, line ->
+            if (line.lineCount > 0) sum += lineGap + line.height(lineMax[index])
+        }
+        facts.forEachIndexed { index, fact ->
+            val detail = if (fact.detail.lineCount > 0 && detailMax[index] > 0) {
+                detailGap + fact.detail.height(detailMax[index])
+            } else {
+                0
+            }
+            sum += factChrome + maxOf(keyMin, fact.value.height(Int.MAX_VALUE) + detail)
+        }
+        return sum
+    }
+    fun trim(limits: MutableList<Int>, indices: List<Int>, floor: Int): Boolean {
+        while (total() > available) {
+            val index = indices.filter { limits[it] > floor }.maxByOrNull { limits[it] } ?: break
+            limits[index] -= 1
+        }
+        return total() <= available
+    }
+    val last = listOfNotNull(lines.indices.lastOrNull())
+    val details = facts.indices.toList()
+    if (total() > available) {
+        trim(lineMax, last, 2) ||
+            trim(detailMax, details, 2) ||
+            trim(lineMax, last, 1) ||
+            trim(detailMax, details, 1) ||
+            trim(lineMax, lines.indices.toList(), 1)
+    }
+    return NovaPlaySetupReadFit(
+        lineMaxLines = lineMax.toList(),
+        detailMaxLines = detailMax.map { if (it <= 0) Int.MAX_VALUE else it },
+    )
 }
 
 /** Drawn heights, kept beside the drawing so the two cannot drift apart unnoticed. */
@@ -571,6 +795,13 @@ private val NOVA_PLAY_SETUP_TWO_COLUMN_MIN = 640.dp
 private val NOVA_PLAY_SETUP_READ_WIDTH = 246.dp
 private val NOVA_PLAY_SETUP_GUTTER = 22.dp
 private val NOVA_PLAY_SETUP_FACT_KEY = 104.dp
+/** A fact is never shorter than its key: one 13sp label line under a 3dp inset. */
+private val NOVA_PLAY_SETUP_FACT_KEY_MIN = 16.dp
+/**
+ * One row of destination cards: a choice row's 48dp floor with a two line caption, plus its gap.
+ * Their captions say why a place cannot be chosen, so they are budgeted at two lines.
+ */
+private val NOVA_PLAY_SETUP_DESTINATION_STRIDE = 70.dp
 
 /**
  * Turn the launch profile summary into what the left column reads.

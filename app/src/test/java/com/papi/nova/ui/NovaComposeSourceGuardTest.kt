@@ -1293,6 +1293,27 @@ class NovaComposeSourceGuardTest {
         )
     }
 
+    @Test
+    fun whereAGameOpensIsDrawnOnceAsItsOwnControl() {
+        val content = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailContent.kt")
+        val setup = readSource("src/main/java/com/papi/nova/ui/NovaPlaySetup.kt")
+        assertTrue(
+            "where a game opens is one control: focusable destination cards above the rows. A Change Space " +
+                "row that cycled the places and a legend that restated them as cards drew the same choice " +
+                "twice, which is what LaunchControls was removed for",
+            setup.contains("internal fun NovaPlaySetupDestinations(") &&
+                content.contains("NovaPlaySetupDestinations(") &&
+                content.contains("val settingRows = playSetupRows.filter { it.row != NovaPlaySetupRow.PLAY_IN }") &&
+                content.contains("settingRows.forEachIndexed { index, rowState ->") &&
+                content.contains("settingRows.firstOrNull { it.row == explainedPlaySetupRow }") &&
+                !content.contains("playSetupRows.forEachIndexed")
+        )
+        assertFalse(
+            "the destination cards are not the legend: the legend stays a description and never a stop",
+            playSetupComparison().contains("NovaPlaySetupDestinations")
+        )
+    }
+
     /** Just the strip, so a focusable anywhere else in Play Setup cannot satisfy the check. */
     private fun playSetupComparison(): String =
         readSource("src/main/java/com/papi/nova/ui/NovaPlaySetup.kt").section(

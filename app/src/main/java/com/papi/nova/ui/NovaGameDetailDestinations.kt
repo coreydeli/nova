@@ -545,6 +545,11 @@ internal fun NovaSteamChoiceRow(
     modifier: Modifier = Modifier,
     /** A short status word drawn as a chip before the chevron, and read after the label. */
     badge: String = "",
+    /**
+     * Read the caption too. A destination card's caption is the only place it says why it
+     * cannot be chosen, and a row whose caption only restates its label keeps it quiet.
+     */
+    describeCaption: Boolean = false,
 ) {
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
@@ -618,7 +623,9 @@ internal fun NovaSteamChoiceRow(
             // landscape viewport, and four times six is most of the difference.
             .padding(horizontal = 14.dp, vertical = 6.dp)
             .semantics {
-                contentDescription = listOf(label, value, badge).filter { it.isNotBlank() }.joinToString(". ")
+                contentDescription = listOf(label, value, badge, if (describeCaption) caption else "")
+                    .filter { it.isNotBlank() }
+                    .joinToString(". ")
                 // A row that offers an action it cannot take right now says so to TalkBack and to tests.
                 if (onClick != null && !enabled) disabled()
             },

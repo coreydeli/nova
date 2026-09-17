@@ -391,6 +391,7 @@ internal fun NovaGameDetailContent(
                             bodyHeight,
                             factCount = hostPlaySetupPlan.facts.size,
                         ),
+                        fitHeight = bodyHeight,
                         rows = {
                             NovaHostSetupRowList(
                                 rows = hostPlaySetupRows,
@@ -408,10 +409,17 @@ internal fun NovaGameDetailContent(
                     )
                 } else {
                     val summary = optimizationState.profileSummary
+                    // Where this game opens is drawn as its own control above the rows it used to
+                    // be one of, so the legend under the rows explains only the rows.
+                    val destinationsRow = playSetupRows.firstOrNull { it.row == NovaPlaySetupRow.PLAY_IN }
+                    val settingRows = playSetupRows.filter { it.row != NovaPlaySetupRow.PLAY_IN }
                     // Spend the room that is there rather than a number picked in advance:
                     // each advertised launch control leaves less room for the legend.
-                    val consequenceLines =
-                        novaPlaySetupConsequenceLines(bodyHeight, playSetupRows.size)
+                    val consequenceLines = novaPlaySetupConsequenceLines(
+                        bodyHeight,
+                        settingRows.size,
+                        destinations = destinationsRow != null,
+                    )
                     NovaPlaySetupBody(
                         plan = novaPlaySetupPlan(
                             // The resolved mode, not the name of the control that sets
@@ -493,13 +501,26 @@ internal fun NovaGameDetailContent(
                             bodyHeight,
                             factCount = summary?.let { 4 } ?: 2,
                         ),
+                        fitHeight = bodyHeight,
                         rows = {
+                            // Where this game opens, as the one control that sets it. When a place
+                            // can be chosen, the cards take first focus rather than the first row.
+                            val destinationsFocus = destinationsRow?.options
+                                ?.any { it.enabled && it.onSelect != null } == true
+                            if (destinationsRow != null) {
+                                NovaPlaySetupDestinations(
+                                    title = destinationsRow.stripTitle,
+                                    status = destinationsRow.caption,
+                                    options = destinationsRow.options,
+                                    autoFocus = destinationsFocus,
+                                )
+                            }
                             // Host-backed rows, drawn in a fixed order. Each advances its own value
                             // on A or a tap, and points the strip at itself on focus, so the
                             // explanation follows the cursor without being a stop on it.
-                            playSetupRows.forEachIndexed { index, rowState ->
+                            settingRows.forEachIndexed { index, rowState ->
                                 NovaSteamChoiceRow(
-                                    autoFocus = index == 0,
+                                    autoFocus = index == 0 && !destinationsFocus,
                                     label = rowState.label,
                                     caption = rowState.caption,
                                     enabled = rowState.enabled,
@@ -515,8 +536,8 @@ internal fun NovaGameDetailContent(
                             // state of its own. A row that has nothing to compare -- one
                             // launch mode, or no display planner on this host -- draws
                             // nothing rather than a strip that repeats the row above it.
-                            val explained = playSetupRows.firstOrNull { it.row == explainedPlaySetupRow }
-                                ?: playSetupRows.firstOrNull()
+                            val explained = settingRows.firstOrNull { it.row == explainedPlaySetupRow }
+                                ?: settingRows.firstOrNull()
                             if (explained != null && explained.options.size > 1) {
                                 NovaPlaySetupComparison(
                                     title = explained.stripTitle,

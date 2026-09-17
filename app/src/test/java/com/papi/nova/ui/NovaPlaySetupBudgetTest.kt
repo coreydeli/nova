@@ -60,4 +60,61 @@ class NovaPlaySetupBudgetTest {
         assertTrue("more facts must not buy more prose", many <= few)
         assertTrue(many >= 1)
     }
+
+
+    private fun text(lines: Int, lineHeight: Int) = NovaPlaySetupMeasuredText(List(lines) { (it + 1) * lineHeight })
+
+    private fun fact(valueLines: Int, detailLines: Int) = NovaPlaySetupMeasuredFact(
+        value = text(valueLines, 19),
+        detail = text(detailLines, 15),
+    )
+
+    private fun fitReadColumn(available: Int) = novaPlaySetupFitReadColumn(
+        available = available,
+        fixed = 16 + 35 + 22,
+        lineGap = 6,
+        // What it resolved, then the opening sentence over three lines.
+        lines = listOf(text(1, 19), text(3, 19)),
+        lineCap = 3,
+        factChrome = 10,
+        detailGap = 4,
+        keyMin = 16,
+        facts = listOf(
+            fact(valueLines = 1, detailLines = 1),
+            fact(valueLines = 1, detailLines = 3),
+            // A host profile whose value wrapped: the last line the Retroid cut off.
+            fact(valueLines = 2, detailLines = 0),
+        ),
+    )
+
+    @Test
+    fun theReadColumnGivesUpProseAndDetailRatherThanCuttingItsLastFact() {
+        // 335 of height against 300: the shape of the Play Setup screen whose host profile ran
+        // under the hint bar, where the d-pad could never scroll to it.
+        val fit = fitReadColumn(available = 300)
+        assertEquals(listOf(1, 1), fit.lineMaxLines)
+        assertEquals(listOf(1, 2, Int.MAX_VALUE), fit.detailMaxLines)
+    }
+
+    @Test
+    fun aReadColumnThatFitsKeepsEveryLine() {
+        val fit = fitReadColumn(available = 1000)
+        assertEquals(listOf(1, 3), fit.lineMaxLines)
+        assertEquals(listOf(1, 3, Int.MAX_VALUE), fit.detailMaxLines)
+    }
+
+    @Test
+    fun theReadColumnNeverTrimsBelowOneLineOrTouchesAValue() {
+        val fit = fitReadColumn(available = 40)
+        assertEquals(listOf(1, 1), fit.lineMaxLines)
+        assertEquals(listOf(1, 1, Int.MAX_VALUE), fit.detailMaxLines)
+    }
+
+    @Test
+    fun destinationsAboveTheRowsCostTheLegendRoom() {
+        val withoutDestinations = novaPlaySetupConsequenceLines(retroidBody, rowCount = 2)
+        val withDestinations = novaPlaySetupConsequenceLines(retroidBody, rowCount = 2, destinations = true)
+        assertTrue(withDestinations <= withoutDestinations)
+        assertTrue(withDestinations >= 1)
+    }
 }

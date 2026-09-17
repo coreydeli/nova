@@ -508,7 +508,8 @@ class NovaGameDetailActivity : NovaActivity() {
         // Which row the comparison strip is explaining. It follows focus, and a tap sets
         // it too -- touch has no cursor for the strip to follow, and a finger that lands
         // on a row should get the same explanation a d-pad would.
-        explainedRow = if (spaceGame != null) NovaPlaySetupRow.PLAY_IN else NovaPlaySetupRow.WHERE_IT_RUNS
+        // Where a Space game opens is its own control above the rows, not a row the strip explains.
+        explainedRow = if (spaceGame != null) NovaPlaySetupRow.RESOLUTION else NovaPlaySetupRow.WHERE_IT_RUNS
         // An explicit resolution, held until launch rather than launching on the spot.
         // Picking one used to start the game immediately, which is why the row that owned
         // it could not be a setting: there was nothing to set. The choice itself is
@@ -1303,8 +1304,10 @@ class NovaGameDetailActivity : NovaActivity() {
             val rows = mutableListOf<NovaPlaySetupRowState>()
             if (playDestinations.isNotEmpty()) rows += NovaPlaySetupRowState(
                 row = NovaPlaySetupRow.PLAY_IN, label = getString(R.string.nova_space_change),
+                // Said above the destination cards only when there is something to say: the cards
+                // and their heading already explain the choice.
                 caption = environmentError
-                    ?: getString(if (environmentChanging) R.string.nova_space_changing else R.string.nova_space_change_caption),
+                    ?: if (environmentChanging) getString(R.string.nova_space_changing) else "",
                 value = currentGame.space?.name ?: getString(R.string.nova_space_desktop),
                 stripTitle = getString(R.string.nova_space_where_it_opens),
                 options = playDestinations.map { choice -> NovaPlaySetupOption(
