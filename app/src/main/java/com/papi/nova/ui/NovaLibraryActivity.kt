@@ -1666,7 +1666,8 @@ class NovaLibraryActivity : NovaActivity() {
                             game = space,
                             displayName = spacesSnapshot?.selected?.name,
                             spaceState = spacesSnapshot?.selected?.state,
-                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1 || spacesSnapshot?.desktopAllowed == true) (::showSpaceChooser) else null,
+                            // Always offered: the chooser says why when there is nowhere else to go.
+                            onChoose = ::showSpaceChooser,
                             hostName = serverName.orEmpty().ifBlank { serverHost },
                             activeSession = activeSession,
                             onOpen = { openSpace(space) },

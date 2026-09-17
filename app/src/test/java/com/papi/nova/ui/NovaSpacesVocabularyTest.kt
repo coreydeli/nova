@@ -109,6 +109,21 @@ class NovaSpacesVocabularyTest {
             bar.contains("NovaActionButton("),
         )
         assertTrue("its words come from the shared rules, not from the composable", bar.contains("NovaSpacesCopy.environmentLabel("))
+        assertFalse(
+            "drawn as plain text when there was nowhere else to go, the control could not be pressed and said nothing about " +
+                "why a newly paired device could not switch (papi, 2026-09-16 21:27)",
+            bar.contains("offersChoice"),
+        )
+        val chooser = File("src/main/java/com/papi/nova/ui/NovaSpaceChooser.kt").readText()
+        assertTrue(
+            "the chooser always lists Desktop and says why it is off, from the shared rules",
+            chooser.contains("NovaSpacesCopy.desktopChoice(snapshot)") && !chooser.contains("if (snapshot.desktopAllowed)"),
+        )
+        val activity = File("src/main/java/com/papi/nova/ui/NovaLibraryActivity.kt").readText()
+        assertFalse(
+            "the Space screen hid Change Space unless there was another place to go, which left nothing to press",
+            activity.contains("desktopAllowed == true) (::showSpaceChooser) else null"),
+        )
         val strip = landscapeStrip()
         assertFalse("a fixed 300 dp slot is what pushed the button into the middle", strip.contains("width(300.dp"))
         assertTrue(

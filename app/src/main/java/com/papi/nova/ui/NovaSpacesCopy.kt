@@ -12,8 +12,17 @@ internal data class NovaEnvironmentLabel(
     @StringRes val nameRes: Int?,
     val spaceName: String?,
     @StringRes val status: Int?,
-    /** More than one place to play, so the control opens the chooser. */
+    /**
+     * More than one place to play. The control opens the chooser either way; this only says
+     * whether the chooser has another place to offer.
+     */
     val offersChoice: Boolean,
+)
+
+/** The chooser's Desktop row: whether it can be chosen now, and the caption that says so or why not. */
+internal data class NovaDesktopChoice(
+    val enabled: Boolean,
+    @StringRes val caption: Int,
 )
 
 /**
@@ -84,6 +93,21 @@ internal object NovaSpacesCopy {
             offersChoice = snapshot.spaces.size + (if (snapshot.desktopAllowed) 1 else 0) > 1,
         )
     }
+
+    /**
+     * The chooser always lists Desktop. Without Desktop Access the row is off and says where to
+     * turn it on, so a device that cannot leave its Space learns why instead of finding nothing to
+     * press.
+     */
+    fun desktopChoice(snapshot: PolarisSpaces): NovaDesktopChoice = when {
+        !snapshot.desktopAllowed -> NovaDesktopChoice(false, R.string.nova_space_desktop_access_off)
+        snapshot.selectedId == "desktop" -> NovaDesktopChoice(snapshot.canSwitch, R.string.nova_space_current)
+        else -> NovaDesktopChoice(snapshot.canSwitch, R.string.nova_space_desktop_caption)
+    }
+
+    /** The one Space this device may use when it has no other Space and no Desktop Access; null otherwise. */
+    fun onlyPlace(snapshot: PolarisSpaces): PolarisSpace? =
+        snapshot.spaces.singleOrNull()?.takeIf { !snapshot.desktopAllowed }
 
     /** A device with nothing to stream: the host says so, or lists no Space and allows no Desktop. */
     fun noSpaceAssigned(snapshot: PolarisSpaces): Boolean = snapshot.enabled &&

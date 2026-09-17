@@ -115,8 +115,38 @@ class NovaSpacesCopyTest {
             NovaSpacesCopy.environmentLabel(snapshot(), statusKnown = false).status,
         )
         assertFalse(
-            "one Space without Desktop has nothing to choose, so the control is plain text",
+            "one Space without Desktop leaves the chooser nothing else to offer; the control still opens it to say why",
             NovaSpacesCopy.environmentLabel(snapshot()).offersChoice,
+        )
+    }
+
+    @Test
+    fun theChooserAlwaysListsDesktopAndSaysWhyItIsOff() {
+        val off = NovaSpacesCopy.desktopChoice(snapshot())
+        assertFalse("without Desktop Access the row cannot be chosen", off.enabled)
+        assertEquals("and says where to turn it on", R.string.nova_space_desktop_access_off, off.caption)
+
+        val allowed = NovaSpacesCopy.desktopChoice(snapshot(desktopAllowed = true))
+        assertTrue(allowed.enabled)
+        assertEquals(R.string.nova_space_desktop_caption, allowed.caption)
+
+        val current = NovaSpacesCopy.desktopChoice(
+            snapshot(spaces = listOf(PolarisSpace("a", "Alex", "ready", false)), desktopAllowed = true),
+        )
+        assertEquals(R.string.nova_space_current, current.caption)
+
+        assertFalse(
+            "a stream on this device still blocks the change",
+            NovaSpacesCopy.desktopChoice(snapshot(canSwitch = false, desktopAllowed = true)).enabled,
+        )
+
+        assertEquals("one Space and no Desktop is the only place", "Alex", NovaSpacesCopy.onlyPlace(snapshot())?.name)
+        assertNull("Desktop is another place", NovaSpacesCopy.onlyPlace(snapshot(desktopAllowed = true)))
+        assertNull(
+            "two Spaces are two places",
+            NovaSpacesCopy.onlyPlace(
+                snapshot(spaces = listOf(PolarisSpace("a", "Alex", "ready", true), PolarisSpace("b", "Sam", "ready", false))),
+            ),
         )
     }
 

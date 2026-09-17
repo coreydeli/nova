@@ -45,6 +45,9 @@ import kotlinx.coroutines.delay
  * Space is how you browse its games; only what the host says cannot run at all is off. Focus
  * is claimed once, when the chooser opens, so a poll that changes a chip does not move the
  * cursor. Three Spaces and the Desktop fit a Retroid Pocket 6 without scrolling.
+ *
+ * Desktop is always listed. When this device has no Desktop Access its row is off and says where
+ * to turn it on, and a device with a single Space and no Desktop reads that plainly in the intro.
  */
 @Composable
 internal fun NovaSpaceChooser(
@@ -59,6 +62,7 @@ internal fun NovaSpaceChooser(
     val backFocus = remember { FocusRequester() }
     val input = LocalInputModeManager.current
     val blocked = NovaSpacesCopy.switchBlockedReason(snapshot)?.let { stringResource(it) }
+    val only = NovaSpacesCopy.onlyPlace(snapshot)
     LaunchedEffect(Unit) {
         delay(NOVA_FIRST_FOCUS_SETTLE_MS)
         input.requestInputMode(InputMode.Keyboard)
@@ -79,6 +83,7 @@ internal fun NovaSpaceChooser(
                 text = when {
                     busy -> stringResource(R.string.nova_space_changing)
                     blocked != null -> blocked
+                    only != null -> stringResource(R.string.nova_space_chooser_only_one, only.name)
                     else -> stringResource(R.string.nova_space_chooser_intro)
                 },
                 color = if (blocked != null && !busy) colors.textPrimary else colors.textSecondary,
@@ -92,17 +97,19 @@ internal fun NovaSpaceChooser(
                 Text(stringResource(R.string.nova_space_status_unknown_hint), color = colors.textSecondary, fontSize = 13.sp)
             }
             val current = snapshot.selectedId
-            if (snapshot.desktopAllowed) {
-                NovaSteamChoiceRow(
-                    label = stringResource(R.string.nova_space_desktop),
-                    caption = stringResource(if (current == "desktop") R.string.nova_space_current else R.string.nova_space_desktop_caption),
-                    enabled = snapshot.canSwitch,
-                    onClick = { onChoose("desktop") },
-                    selected = current == "desktop",
-                    autoFocus = current == "desktop",
-                    modifier = Modifier.testTag("nova-space-choice-desktop"),
-                )
-            }
+            // Always listed. Without Desktop Access the row is off and its caption says where to turn
+            // it on; hiding it left a device that could not switch with nothing to explain why.
+            val desktop = NovaSpacesCopy.desktopChoice(snapshot)
+            NovaSteamChoiceRow(
+                label = stringResource(R.string.nova_space_desktop),
+                caption = stringResource(desktop.caption),
+                enabled = desktop.enabled,
+                onClick = { onChoose("desktop") },
+                selected = current == "desktop",
+                autoFocus = current == "desktop",
+                modifier = Modifier.testTag("nova-space-choice-desktop"),
+                describeCaption = !snapshot.desktopAllowed,
+            )
             snapshot.spaces.forEach { space ->
                 val reason = NovaSpacesCopy.openBlockedReason(space)
                 NovaSteamChoiceRow(

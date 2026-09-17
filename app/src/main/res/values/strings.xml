@@ -1729,6 +1729,8 @@
     <string name="nova_space_bar_unavailable">Unavailable on the host</string>
     <string name="nova_space_bar_none">None assigned</string>
     <string name="nova_space_chooser_intro">Pick the Space whose games, Steam sign-in and saves you want to use.</string>
+    <string name="nova_space_chooser_only_one">%1$s is the only place this device can play right now.</string>
+    <string name="nova_space_desktop_access_off">Desktop Access is off for this device. Turn it on from the Spaces page in Polaris.</string>
     <string name="nova_space_status_unknown_hint">The last Space check failed. Nova keeps trying; choosing still works.</string>
     <string name="nova_space_state_ready">Ready</string>
     <string name="nova_space_state_starting">Starting</string>

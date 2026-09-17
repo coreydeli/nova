@@ -436,14 +436,10 @@ private fun rememberNovaLibraryTopBarFit(
                     meta = minOf(132f, width(resultText, small) + 6f + width(layoutLabel, small)),
                     space = environment?.let { env ->
                         // NovaEnvironmentBar, compact: 8 + 10 dp surface padding, a 28 dp avatar
-                        // scaled with text, 8 dp gaps and a 20 sp chevron when it is an action.
-                        val chevron = if (env.offersChoice) {
-                            width("›", base.merge(TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))) + 8f
-                        } else {
-                            0f
-                        }
+                        // scaled with text, 8 dp gaps and the 20 sp chevron it always draws.
+                        val chevron = width("›", base.merge(TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))) + 8f
                         NovaTopBarSpaceWidths(
-                            chrome = (if (env.offersChoice) 18f else 4f) + 28f * iconScale + chevron,
+                            chrome = 18f + 28f * iconScale + chevron,
                             columnGap = 8f,
                             caption = width(env.caption, small),
                             name = width(env.name, base.merge(TextStyle(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold))),

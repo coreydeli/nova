@@ -1,7 +1,6 @@
 package com.papi.nova.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +8,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,8 +20,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,8 +27,6 @@ import androidx.compose.ui.unit.sp
 import com.papi.nova.R
 import com.papi.nova.api.PolarisSpaces
 import com.papi.nova.ui.compose.LocalNovaComposeColors
-import com.papi.nova.ui.compose.LocalNovaLibrarySurfaces
-import com.papi.nova.ui.compose.LocalNovaMenuOpacityScale
 import com.papi.nova.ui.compose.NovaActionSurface
 import com.papi.nova.ui.compose.NovaBadge
 import com.papi.nova.ui.compose.NovaRadius
@@ -45,8 +37,12 @@ import com.papi.nova.ui.compose.NovaRadius
  *
  * It used to be a label that filled a fixed 300 dp slot with its own Change Space button at
  * the far end, so in the landscape strip the button floated alone in the middle of the bar,
- * away from the name it changes. Now the whole row is the action, sized to its content, and
- * when there is nothing to choose it is plain text with no chevron and nothing to focus.
+ * away from the name it changes. Now the whole row is the action, sized to its content.
+ *
+ * It stays a control when this device has nowhere else to go. Drawn as plain text it could not
+ * be pressed and said nothing about why: a newly paired device with a Space but no Desktop
+ * Access simply could not switch (papi, 2026-09-16 21:27). The chooser it opens names the
+ * reason, for example that Desktop Access is off and where to turn it on.
  *
  * What it says comes from the host, never from a fallback (see [NovaSpacesCopy.environmentLabel]):
  * an unavailable host reads "Unavailable on the host", Desktop is named only when the host
@@ -77,7 +73,6 @@ internal fun NovaEnvironmentBar(
     showName: Boolean = true,
 ) {
     val colors = LocalNovaComposeColors.current
-    val surfaces = LocalNovaLibrarySurfaces.current
     val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
     val strings = rememberNovaEnvironmentStrings(spaces, statusKnown, changing)
     val caption = strings.caption
@@ -87,73 +82,37 @@ internal fun NovaEnvironmentBar(
     val change = stringResource(R.string.nova_space_change)
     val minHeight = if (compact) 48.dp else 54.dp
     Box(modifier.testTag("nova-library-environment")) {
-        if (strings.offersChoice) {
-            val active = enabled && !changing
-            NovaActionSurface(
-                onClick = onChoose,
-                enabled = active,
-                contentDescription = "$spoken. $change.",
-                minHeight = minHeight,
-                // Beside Options and System in the strip it wears their shape; a full-width row
-                // keeps the row radius every selectable row uses.
-                cornerRadius = if (framed) NovaRadius.row else NovaRadius.hero,
-                contentPadding = PaddingValues(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
-                contentAlignment = Alignment.CenterStart,
-                modifier = (if (framed) Modifier.fillMaxWidth() else Modifier).testTag("nova-environment-choose"),
-            ) { contentColor, focused ->
-                NovaEnvironmentLabelRow(
-                    caption = caption,
-                    name = name,
-                    status = status,
-                    compact = compact,
-                    fontScale = fontScale,
-                    nameColor = contentColor,
-                    captionColor = if (active) colors.textSecondary else colors.textMuted,
-                    chevronColor = when {
-                        !active -> colors.textMuted
-                        focused -> colors.accent
-                        else -> colors.textSecondary
-                    },
-                    fill = framed,
-                    showCaption = showCaption,
-                    compactStatus = compactStatus,
-                    showName = showName,
-                )
-            }
-        } else {
-            val shape = RoundedCornerShape(NovaRadius.row)
-            Box(
-                modifier = (
-                    if (framed) {
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(shape)
-                            .background(surfaces.panel.copy(alpha = 0.34f * LocalNovaMenuOpacityScale.current))
-                            .border(1.dp, surfaces.tileBorder, shape)
-                            .padding(horizontal = 10.dp)
-                    } else {
-                        Modifier.padding(horizontal = 2.dp)
-                    }
-                    )
-                    .heightIn(min = minHeight)
-                    .semantics(mergeDescendants = true) { contentDescription = spoken },
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                NovaEnvironmentLabelRow(
-                    caption = caption,
-                    name = name,
-                    status = status,
-                    compact = compact,
-                    fontScale = fontScale,
-                    nameColor = colors.textPrimary,
-                    captionColor = colors.textSecondary,
-                    chevronColor = null,
-                    fill = framed,
-                    showCaption = showCaption,
-                    compactStatus = compactStatus,
-                    showName = showName,
-                )
-            }
+        val active = enabled && !changing
+        NovaActionSurface(
+            onClick = onChoose,
+            enabled = active,
+            contentDescription = "$spoken. $change.",
+            minHeight = minHeight,
+            // Beside Options and System in the strip it wears their shape; a full-width row
+            // keeps the row radius every selectable row uses.
+            cornerRadius = if (framed) NovaRadius.row else NovaRadius.hero,
+            contentPadding = PaddingValues(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+            contentAlignment = Alignment.CenterStart,
+            modifier = (if (framed) Modifier.fillMaxWidth() else Modifier).testTag("nova-environment-choose"),
+        ) { contentColor, focused ->
+            NovaEnvironmentLabelRow(
+                caption = caption,
+                name = name,
+                status = status,
+                compact = compact,
+                fontScale = fontScale,
+                nameColor = contentColor,
+                captionColor = if (active) colors.textSecondary else colors.textMuted,
+                chevronColor = when {
+                    !active -> colors.textMuted
+                    focused -> colors.accent
+                    else -> colors.textSecondary
+                },
+                fill = framed,
+                showCaption = showCaption,
+                compactStatus = compactStatus,
+                showName = showName,
+            )
         }
     }
 }
@@ -163,7 +122,6 @@ internal data class NovaEnvironmentStrings(
     val caption: String,
     val name: String,
     val status: String?,
-    val offersChoice: Boolean,
 )
 
 @Composable
@@ -177,7 +135,6 @@ internal fun rememberNovaEnvironmentStrings(
         caption = stringResource(label.caption),
         name = label.nameRes?.let { stringResource(it) } ?: label.spaceName.orEmpty(),
         status = label.status?.let { stringResource(it) },
-        offersChoice = label.offersChoice,
     )
 }
 
