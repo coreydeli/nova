@@ -76,19 +76,91 @@ class NovaSpacesVocabularyTest {
     }
 
     @Test
-    fun landscapeStripShowsTheSpaceRowOnceBesideTheHost() {
-        val stage = File("src/main/java/com/papi/nova/ui/NovaLibraryStage.kt").readText()
-        val strip = stage.substring(
-            stage.indexOf("internal fun NovaLibraryLandscapeShowcaseStripContent("),
-            stage.indexOf("private fun NovaLibraryToolbarIdentity("),
-        )
+    fun landscapeStripShowsTheSpaceRowOnceLeftOfOptions() {
+        val strip = landscapeStrip()
         assertEquals(
             "one Space row in the strip; a rerun of a patch once left two and no host name",
             1,
             Regex("NovaEnvironmentBar\\(").findAll(strip).count(),
         )
         assertFalse("the host identity is not the else branch of the Space row", strip.contains("} else NovaLibraryToolbarIdentity("))
-        assertTrue("host first, then the Space row", strip.indexOf("NovaLibraryToolbarIdentity(") < strip.indexOf("NovaEnvironmentBar("))
+        val identity = strip.indexOf("NovaLibraryToolbarIdentity(")
+        val middle = strip.indexOf("continueSlot(fit)")
+        val space = strip.indexOf("NovaEnvironmentBar(")
+        val options = strip.indexOf("NovaLibraryToolbarOptionsAction(")
+        val system = strip.indexOf("NovaLibraryToolbarSystemAction(")
+        assertTrue(
+            "host first and the card in the middle; then Space, Options and System as one right-hand cluster. Beside the " +
+                "host the Space control read as floating in the middle of the strip (papi, 2026-09-16)",
+            identity in 0 until middle && middle < space && space < options && options < system,
+        )
+        assertFalse(
+            "the result count and layout name read as a stray label beside the Space control; both live in the Options " +
+                "sheet (papi, 2026-09-16 21:27: \"can get rid of 2 Shown and Grid\")",
+            strip.contains("NovaLibraryResultAndLayoutMeta(") || strip.contains("nova_library_results_format"),
+        )
+    }
+
+    @Test
+    fun theSpaceRowIsOneControlNotALabelBesideAFloatingButton() {
+        val bar = File("src/main/java/com/papi/nova/ui/NovaEnvironmentBar.kt").readText()
+        assertTrue(
+            "the whole Space row is the action that opens the chooser",
+            bar.contains("NovaActionSurface(") && bar.contains("onClick = onChoose"),
+        )
+        assertFalse(
+            "a Change Space button of its own sat at the far end of a fixed slot and floated in the middle of the landscape strip",
+            bar.contains("NovaActionButton("),
+        )
+        assertTrue("its words come from the shared rules, not from the composable", bar.contains("NovaSpacesCopy.environmentLabel("))
+        assertFalse(
+            "drawn as plain text when there was nowhere else to go, the control could not be pressed and said nothing about " +
+                "why a newly paired device could not switch (papi, 2026-09-16 21:27)",
+            bar.contains("offersChoice"),
+        )
+        val chooser = File("src/main/java/com/papi/nova/ui/NovaSpaceChooser.kt").readText()
+        assertTrue(
+            "the chooser always lists Desktop and says why it is off, from the shared rules",
+            chooser.contains("NovaSpacesCopy.desktopChoice(snapshot)") && !chooser.contains("if (snapshot.desktopAllowed)"),
+        )
+        val activity = File("src/main/java/com/papi/nova/ui/NovaLibraryActivity.kt").readText()
+        assertFalse(
+            "the Space screen hid Change Space unless there was another place to go, which left nothing to press",
+            activity.contains("desktopAllowed == true) (::showSpaceChooser) else null"),
+        )
+        assertTrue(
+            "the strip's card is for something to act on now, never a copy of the grid's selection",
+            activity.contains(") && NovaLibraryUiStateMapper.showTopBarCard(model.hero)"),
+        )
+        val strip = landscapeStrip()
+        assertFalse("a fixed 300 dp slot is what pushed the button into the middle", strip.contains("width(300.dp"))
+        assertTrue(
+            "the control sizes to its content, capped, and takes the width the fit cut its name to",
+            strip.contains("widthIn(max = minOf(280f * fontScale, fit.spaceWidth).dp)"),
+        )
+    }
+
+    @Test
+    fun theLandscapeStripNeverScrollsAndMeasuresWhatGivesWay() {
+        val strip = landscapeStrip()
+        assertFalse(
+            "a horizontal scroll with a row forced to 700 or 980 dp times the font scale slid Options and System off an " +
+                "815 dp Retroid strip in every Grid or Compact library with Spaces",
+            strip.contains("horizontalScroll(") || strip.contains("rowWidth") || strip.contains("980.dp") || strip.contains("700.dp"),
+        )
+        assertTrue("what gives way is decided by the tested fit, from measured text", strip.contains("rememberNovaLibraryTopBarFit(") && strip.contains("novaLibraryTopBarFit("))
+        assertTrue(
+            "the host side is the weighted part, so Row measures the right-hand cluster first and the menus never shrink",
+            strip.contains("modifier = Modifier.weight(1f).fillMaxHeight()"),
+        )
+    }
+
+    private fun landscapeStrip(): String {
+        val stage = File("src/main/java/com/papi/nova/ui/NovaLibraryStage.kt").readText()
+        return stage.substring(
+            stage.indexOf("internal fun NovaLibraryLandscapeShowcaseStripContent("),
+            stage.indexOf("private fun NovaLibraryToolbarIdentity("),
+        )
     }
 
     @Test

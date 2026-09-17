@@ -40,7 +40,13 @@ data class PolarisGame(
     @SerialName("play_time") val playTime: PlayTime? = null,
     /** Completion estimates, or null when the host's dataset has nothing for this game. */
     @SerialName("beat_time") val beatTime: BeatTime? = null,
-    @SerialName("space") val space: SpaceContext? = null
+    @SerialName("space") val space: SpaceContext? = null,
+    /**
+     * Steam Big Picture on the host's desktop, as the host marks it, so Play Setup can pair it
+     * with a Space's Big Picture. False from a host that does not send the mark. Added last so
+     * no positional caller shifts, as [playTime] explains.
+     */
+    @SerialName("steam_big_picture") val steamBigPicture: Boolean = false
 ) {
     @Serializable
     data class SpaceContext(val id: String, val name: String, val target: String)

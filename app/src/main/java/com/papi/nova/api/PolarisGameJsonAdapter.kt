@@ -77,7 +77,8 @@ object PolarisGameJsonAdapter {
                 if (identity == null || identity.first != id || identity.second != target || name.isBlank() || name.toByteArray(Charsets.UTF_8).size > 128 || name.any { it.code < 32 || it.code == 127 })
                     throw IllegalArgumentException("Invalid Space game identity")
                 PolarisGame.SpaceContext(id, name, target)
-            }
+            },
+            steamBigPicture = json.optBoolean("steam_big_picture", false)
         )
     }
 

@@ -57,6 +57,14 @@ class PolarisGameJsonAdapterTest {
     )
 
     @Test
+    fun steamBigPictureMarkIsReadAndAbsentMeansAnOlderHost() {
+        val marked = PolarisGameJsonAdapter.fromJson(JSONObject("""{"id":"B6A90319","name":"Steam Big Picture","steam_big_picture":true}"""))
+        assertTrue(marked.steamBigPicture)
+        val unmarked = PolarisGameJsonAdapter.fromJson(JSONObject("""{"id":"B6A90319","name":"Steam Big Picture"}"""))
+        assertFalse("a host that does not send the mark changes nothing", unmarked.steamBigPicture)
+    }
+
+    @Test
     fun decodesTheDisplayPlannerContractPolarisServes() {
         val game = PolarisGameJsonAdapter.fromJson(plannerGameJson())
 

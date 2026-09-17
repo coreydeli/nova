@@ -64,6 +64,11 @@ data class NovaGameDetailUiState(
      * "1920x1080@60 · 20 Mbps". Blank when the host has no profile set.
      */
     val hostProfileLabel: String,
+    /**
+     * A Space game: it runs in its Space's own session, with that Space's Steam sign-in and
+     * saves, so the host's default mode is not the question this launch answers.
+     */
+    val runsInSpace: Boolean = false,
 ) {
     /**
      * Whether this game is running somewhere other than where the host would put it.
@@ -85,9 +90,15 @@ data class NovaGameDetailUiState(
     val playModeLabel: String
         get() = PolarisStreamDisplayMode.labelForMode(playMode)
 
-    /** Nova selected an available one-launch replacement for a stale host default. */
+    /**
+     * Nova selected an available one-launch replacement for a stale host default.
+     *
+     * Never for a Space game. The host lists only its Space's own mode for one, which made the
+     * host default look unavailable and every Space launch read as a fallback.
+     */
     val usesSafeHostFallback: Boolean
-        get() = !hasExplicitOverride &&
+        get() = !runsInSpace &&
+            !hasExplicitOverride &&
             launchStreamMode.isNotBlank() &&
             PolarisStreamDisplayMode.normalize(launchStreamMode) !=
             PolarisStreamDisplayMode.normalize(hostStreamDisplayMode)
@@ -229,6 +240,7 @@ data class NovaGameDetailUiState(
                 hostStreamDisplayModeUnavailableReason = hostStreamDisplayModeUnavailableReason,
                 hasExplicitOverride = !perGameOverride.isNullOrBlank(),
                 hostProfileLabel = hostProfileLabel(clientSettings),
+                runsInSpace = NovaSpaceUiState.isSpace(game),
             )
         }
     }

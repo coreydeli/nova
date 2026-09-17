@@ -298,6 +298,54 @@ fun NovaActionButton(
     fontSize: TextUnit = 13.sp,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
 ) {
+    NovaActionSurface(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        primary = primary,
+        destructive = destructive,
+        contentDescription = contentDescription,
+        selected = selected,
+        stateDescription = stateDescription,
+        minHeight = minHeight,
+        cornerRadius = cornerRadius,
+        contentPadding = contentPadding,
+    ) { contentColor, _ ->
+        Text(
+            text = text,
+            color = contentColor,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = fontSize,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * The surface of [NovaActionButton] around content of its own: the same container, focus ring,
+ * focus motion, press state, haptics and disabled treatment, for an action that is more than one
+ * line of text, such as the library's Space control. [content] gets the colour text should use
+ * and whether the surface holds focus, so an affordance like a chevron can follow the ring.
+ */
+@Composable
+fun NovaActionSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    primary: Boolean = false,
+    destructive: Boolean = false,
+    contentDescription: String? = null,
+    selected: Boolean = false,
+    stateDescription: String? = null,
+    minHeight: Dp = 38.dp,
+    cornerRadius: Dp = NovaRadius.hero,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+    contentAlignment: Alignment = Alignment.Center,
+    content: @Composable BoxScope.(contentColor: Color, focused: Boolean) -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -365,7 +413,7 @@ fun NovaActionButton(
             .background(container.copy(alpha = container.alpha * alpha))
             .border(borderWidth, borderColor, shape)
             .semantics {
-                this.contentDescription = contentDescription
+                contentDescription?.let { this.contentDescription = it }
                 if (selected) {
                     this.selected = true
                 }
@@ -389,17 +437,8 @@ fun NovaActionButton(
             )
             .focusable(enabled = enabled)
             .padding(contentPadding),
-        contentAlignment = Alignment.Center
+        contentAlignment = contentAlignment
     ) {
-        Text(
-            text = text,
-            color = contentColor,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = fontSize,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        content(contentColor, focused)
     }
 }

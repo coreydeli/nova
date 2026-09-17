@@ -485,14 +485,13 @@ class NovaComposeSourceGuardTest {
         val posterCard = readSource("src/main/java/com/papi/nova/ui/NovaLibraryPosterCard.kt")
         val focusedRevisionKey = "key(PolarisApiClient.artworkPresentationKey(targetGame, PolarisGame.ARTWORK_KIND_POSTER))"
         assertTrue(
-            "shared Activity and Stage poster views should be revision-aware",
+            "shared Activity and Stage poster views should be revision-aware, and the backdrop keys its hero the same way (it draws no posters now)",
             posterCard.contains("PolarisApiClient.artworkPresentationKey(") &&
                 posterCard.contains("PolarisGame.ARTWORK_KIND_POSTER") &&
-                chrome.contains("PolarisApiClient.artworkPresentationKey(") &&
-                chrome.contains("PolarisGame.ARTWORK_KIND_POSTER")
+                chrome.contains("PolarisApiClient.artworkPresentationKey(")
         )
         assertTrue(
-            "focused backdrop and home Hero cover should also recreate when the Poster revision changes",
+            "the home Hero cover should recreate when the Poster revision changes, and the backdrop stays fenced by its presentation key",
             source.split(focusedRevisionKey).size - 1 >= 1 &&
                 chrome.contains("R.id.nova_artwork_presentation_key")
         )
@@ -508,14 +507,25 @@ class NovaComposeSourceGuardTest {
     }
 
     @Test
-    fun libraryCinematicBackdropUsesCachedHeroThenPosterFallback() {
+    fun libraryCinematicBackdropDrawsOnlyARealHeroOrTheAmbientField() {
         val backdrop = readSource("src/main/java/com/papi/nova/ui/NovaLibraryCinematicChrome.kt")
+        val mapper = readSource("src/main/java/com/papi/nova/ui/NovaLibraryUiState.kt")
 
-        assertTrue(backdrop.contains("artworkKind = if (hasCachedHero)"))
-        assertTrue(backdrop.contains("PolarisGame.ARTWORK_KIND_HERO"))
-        assertTrue(backdrop.contains("PolarisGame.ARTWORK_KIND_POSTER"))
+        assertTrue(
+            "the backdrop asks the mapper which artwork it may draw, so one rule covers every entry",
+            backdrop.contains("NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game) ?: return@let null")
+        )
+        assertTrue(
+            "only a real hero is drawn: cached for a desktop title, listed for a Space title, never Big Picture's bundled mark",
+            mapper.contains("fun cinematicBackdropArtworkKind(game: PolarisGame?): String?") &&
+                mapper.contains("hero.cached || game.space != null") &&
+                mapper.contains("game.space?.target == \"big-picture-v1\"")
+        )
         assertTrue(backdrop.contains("apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)"))
-        assertTrue(backdrop.contains("apiClient.loadCoverInto(view, target.game)"))
+        assertFalse(
+            "a 2:3 poster stretched across a landscape screen crops to a slice of its wordmark: papi saw a giant VIRTUAL DESKTOP behind the whole library",
+            backdrop.contains("apiClient.loadCoverInto(") || backdrop.contains("PolarisGame.ARTWORK_KIND_POSTER")
+        )
         assertFalse(backdrop.contains("coverUrl.trim().isNotEmpty()"))
     }
 
@@ -572,6 +582,15 @@ class NovaComposeSourceGuardTest {
             landscape.indexOf("NovaLibraryLandscapeShowcaseStripContent(") in
                 0 until landscape.indexOf("NovaLibraryContent(") &&
                 landscape.contains("NovaLibraryShowcaseContinue(")
+        )
+        val continueCard = source.section(
+            "private fun RowScope.NovaLibraryShowcaseContinue(",
+            "private fun NovaLibraryTopHeader("
+        )
+        assertTrue(
+            "the strip card's own action (Resume Stream while a game is live) is the highlighted button and End Session stays secondary, so the next step reads at a glance",
+            continueCard.substringBefore("val secondaryLabel").contains("primary = true") &&
+                continueCard.substringAfter("val secondaryLabel").contains("primary = false")
         )
         assertTrue(
             "landscape library should restore the recent rail after picker/grid content, not between hero and picker",
@@ -703,11 +722,21 @@ class NovaComposeSourceGuardTest {
                 mapper.contains("fun controllerHintBarMinHeightDp(): Int")
         )
         assertTrue(
-            "game grid should use mapper-owned inner padding with extra bottom scroll room so the final poster row can settle above the footer",
+            "game grid should use mapper-owned padding: sides that line the artwork up with the bar's content, a top inset that is the focus rise, and extra bottom scroll room so the final poster row can settle above the footer",
             content.contains("contentPadding = PaddingValues(") &&
-                content.contains("NovaLibraryUiStateMapper.gridContentPaddingDp()") &&
+                content.contains("NovaLibraryUiStateMapper.gridSidePaddingDp(layoutMode)") &&
+                content.contains("top = viewportSpec.topInsetDp.dp") &&
                 content.contains("bottom = NovaLibraryUiStateMapper.gridBottomContentPaddingDp(isLandscape).dp") &&
                 mapper.contains("fun gridBottomContentPaddingDp(isLandscape: Boolean): Int")
+        )
+        assertFalse(
+            "no panel frames the posters: papi asked for the box around them to go, and a bordered panel under a bordered bar read as two overlapping backgrounds",
+            content.contains("NovaLibraryPanel(")
+        )
+        assertTrue(
+            "the grid's whole height is its viewport, and a focus scroll keeps the focus rise clear at its top edge the way the first row's inset does",
+            content.contains("viewportHeightDp = maxHeight.value.toInt().coerceAtLeast(1)") &&
+                content.contains("CompositionLocalProvider(LocalBringIntoViewSpec provides focusScrollSpec)")
         )
     }
 
@@ -1290,6 +1319,27 @@ class NovaComposeSourceGuardTest {
             "LaunchControls served the destination that no longer exists; leaving it behind " +
                 "would leave a second way to draw the same choice",
             detail.contains("private fun LaunchControls(")
+        )
+    }
+
+    @Test
+    fun whereAGameOpensIsDrawnOnceAsItsOwnControl() {
+        val content = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailContent.kt")
+        val setup = readSource("src/main/java/com/papi/nova/ui/NovaPlaySetup.kt")
+        assertTrue(
+            "where a game opens is one control: focusable destination cards above the rows. A Change Space " +
+                "row that cycled the places and a legend that restated them as cards drew the same choice " +
+                "twice, which is what LaunchControls was removed for",
+            setup.contains("internal fun NovaPlaySetupDestinations(") &&
+                content.contains("NovaPlaySetupDestinations(") &&
+                content.contains("val settingRows = playSetupRows.filter { it.row != NovaPlaySetupRow.PLAY_IN }") &&
+                content.contains("settingRows.forEachIndexed { index, rowState ->") &&
+                content.contains("settingRows.firstOrNull { it.row == explainedPlaySetupRow }") &&
+                !content.contains("playSetupRows.forEachIndexed")
+        )
+        assertFalse(
+            "the destination cards are not the legend: the legend stays a description and never a stop",
+            playSetupComparison().contains("NovaPlaySetupDestinations")
         )
     }
 

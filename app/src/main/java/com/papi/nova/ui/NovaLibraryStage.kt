@@ -8,8 +8,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +35,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.res.stringResource
@@ -66,8 +66,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -242,8 +246,8 @@ internal fun NovaLibraryPortraitToolbarContent(
 }
 
 /**
- * Landscape draws identity, the continue action, the result count and the two
- * menu buttons in one row.
+ * Landscape draws the host, a card when there is something to act on now, the Space control and the
+ * two menu buttons in one row.
  *
  * A toolbar stacked above a continue card spent the width twice. The toolbar
  * carried an empty gap almost two thirds of the screen wide between the host
@@ -253,91 +257,215 @@ internal fun NovaLibraryPortraitToolbarContent(
  *
  * When there is nothing to continue the slot is absent rather than blank, and
  * identity and metadata reflow across the space instead of holding it open.
+ *
+ * The row never scrolls. It used to be forced to 700 dp, or 980 dp with a continue card, times the
+ * font scale inside a horizontal scroll, so on an 815 dp Retroid strip every Grid or Compact library
+ * with Spaces, and Stage with enlarged text, slid Options and System past the right edge. Now the
+ * parts are measured and [novaLibraryTopBarFit] leaves out what it must, in a fixed order, and the
+ * Space control sits in the right-hand cluster directly left of Options instead of floating beside
+ * the host.
+ *
+ * Three things changed after papi saw that on the Retroid (2026-09-16 21:27). The result count and
+ * layout name left the strip for the Options sheet, where they already were. The Space control is a
+ * control even when this device has nowhere else to go, so pressing it always reaches the chooser,
+ * which says why. And the card only appears for something to act on now (a live game, an empty
+ * library, filters that hide everything), never as a copy of the game selected in the grid.
  */
 @Composable
 internal fun NovaLibraryLandscapeShowcaseStripContent(
     hostLabel: String,
-    resultCount: Int,
-    layoutLabel: String,
     polarisReady: Boolean,
     onOpenOptions: () -> Unit,
     onOpenSystemMenu: () -> Unit,
-    continueSlot: (@Composable RowScope.() -> Unit)? = null,
+    continueSlot: (@Composable RowScope.(NovaTopBarFit) -> Unit)? = null,
+    /** The continue card's words, so the strip can measure the card before drawing it. */
+    continueCard: NovaTopBarContinue? = null,
     environments: PolarisSpaces? = null,
     environmentEnabled: Boolean = true,
     environmentStatusKnown: Boolean = true,
+    environmentChanging: Boolean = false,
     onChooseEnvironment: () -> Unit = {},
 ) {
     val surfaces = LocalNovaLibrarySurfaces.current
     val largeText = LocalDensity.current.fontScale >= 1.5f
-    val shape = RoundedCornerShape(NovaRadius.row)
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-    // Keep one row even on narrow screens or with enlarged text. Controller
-    // focus scrolls the row so every action keeps its full touch target.
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
-    // Identity, the Space bar, the count and two buttons; the continue slot when there is one.
-    val rowWidth = maxOf(maxWidth, (if (continueSlot != null) 980.dp else 700.dp) * fontScale)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(NovaLibraryUiStateMapper.landscapeShowcaseStripHeightDp(largeText).dp)
-            .clip(shape)
-            .background(surfaces.panel.copy(alpha = 0.34f * LocalNovaMenuOpacityScale.current))
-            .border(1.dp, surfaces.tileBorder, shape)
-            .then(if (environments != null) Modifier.horizontalScroll(rememberScrollState()).width(rowWidth) else Modifier)
-            .padding(horizontal = 10.dp, vertical = 5.5.dp)
-            .testTag("nova-library-landscape-toolbar"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        NovaLibraryToolbarIdentity(
+    val shape = RoundedCornerShape(NovaRadius.row)
+    val hostStatus = if (polarisReady) stringResource(R.string.nova_system_menu_status_polaris_ready) else null
+    val environment = environments?.let {
+        rememberNovaEnvironmentStrings(it, environmentStatusKnown, environmentChanging)
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val fit = rememberNovaLibraryTopBarFit(
+            available = maxWidth - NOVA_TOP_BAR_HORIZONTAL_PADDING * 2,
+            largeText = largeText,
             hostLabel = hostLabel,
-            cinematic = true,
-            modifier = Modifier.widthIn(min = 104.dp, max = 168.dp),
-            statusContent = {
-                if (polarisReady) {
-                    Text(
-                        text = stringResource(R.string.nova_system_menu_status_polaris_ready),
-                        color = LocalNovaComposeColors.current.textSecondary,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            },
+            hostStatus = hostStatus,
+            environment = environment,
+            continueCard = if (continueSlot != null) continueCard else null,
         )
-        if (environments != null) {
-            // Beside the host identity, not instead of it: which PC this is still matters
-            // when more than one is paired.
-            NovaEnvironmentBar(
-                spaces = environments,
-                enabled = environmentEnabled,
-                statusKnown = environmentStatusKnown,
-                onChoose = onChooseEnvironment,
-                modifier = Modifier.width(300.dp * fontScale),
-                compact = true,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(NovaLibraryUiStateMapper.landscapeShowcaseStripHeightDp(largeText).dp)
+                .clip(shape)
+                .background(surfaces.panel.copy(alpha = 0.34f * LocalNovaMenuOpacityScale.current))
+                .border(1.dp, surfaces.tileBorder, shape)
+                .padding(horizontal = NOVA_TOP_BAR_HORIZONTAL_PADDING, vertical = 5.5.dp)
+                .testTag("nova-library-landscape-toolbar"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NOVA_TOP_BAR_GAP),
+        ) {
+            // The host and what is running take whatever the right-hand cluster leaves: Row
+            // measures unweighted children first, so Options and System always get their width.
+            Row(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(NOVA_TOP_BAR_GAP),
+            ) {
+                NovaLibraryToolbarIdentity(
+                    hostLabel = hostLabel,
+                    cinematic = true,
+                    modifier = Modifier.widthIn(max = minOf(NOVA_TOP_BAR_IDENTITY_CAP, fit.identityMax).dp),
+                    statusContent = {
+                        if (hostStatus != null && fit.showHostStatus) {
+                            Text(
+                                text = hostStatus,
+                                color = LocalNovaComposeColors.current.textSecondary,
+                                fontSize = 10.sp,
+                                lineHeight = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                )
+                if (continueSlot != null) {
+                    continueSlot(fit)
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+            if (environments != null) {
+                // Directly left of Options, with the same gap as Options and System: the Space is
+                // something to change, like the menus beside it. Sized to its content beside the
+                // host, it read as floating in the middle of the strip.
+                NovaEnvironmentBar(
+                    spaces = environments,
+                    enabled = environmentEnabled,
+                    statusKnown = environmentStatusKnown,
+                    changing = environmentChanging,
+                    onChoose = onChooseEnvironment,
+                    modifier = Modifier.widthIn(max = minOf(280f * fontScale, fit.spaceWidth).dp),
+                    compact = true,
+                    showCaption = fit.showSpaceCaption,
+                    compactStatus = fit.compactSpaceStatus,
+                    showName = fit.showSpaceName,
+                )
+            }
+            NovaLibraryToolbarOptionsAction(
+                largeText = largeText,
+                primary = false,
+                onClick = onOpenOptions,
+            )
+            NovaLibraryToolbarSystemAction(
+                onClick = onOpenSystemMenu,
             )
         }
-        if (continueSlot != null) {
-            continueSlot()
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
-        }
-        NovaLibraryResultAndLayoutMeta(
-            resultCount = resultCount,
-            layoutLabel = layoutLabel,
-            cinematic = true,
-        )
-        NovaLibraryToolbarOptionsAction(
-            largeText = largeText,
-            primary = false,
-            onClick = onOpenOptions,
-        )
-        NovaLibraryToolbarSystemAction(
-            onClick = onOpenSystemMenu,
-        )
     }
+}
+
+/** The mapper owns the inset, because the poster grid lines its artwork up with it. */
+private val NOVA_TOP_BAR_HORIZONTAL_PADDING = NovaLibraryUiStateMapper.libraryBarContentInsetDp().dp
+private val NOVA_TOP_BAR_GAP = 8.dp
+private const val NOVA_TOP_BAR_IDENTITY_CAP = 168f
+private const val NOVA_TOP_BAR_IDENTITY_FLOOR = 56f
+private const val NOVA_TOP_BAR_VERTICAL_PADDING = 5.5f
+/** NovaActionButton's horizontal content padding, both sides. */
+private const val NOVA_TOP_BAR_BUTTON_PADDING = 24f
+/** Rounding headroom between what is measured here and what the row lays out. */
+private const val NOVA_TOP_BAR_SLACK = 6f
+
+/**
+ * Measure the strip's parts at the current font scale, with the same styles the composables draw
+ * them in, and decide what the row leaves out. Everything the fit needs is text; the rest is the
+ * padding, avatar and gaps those composables use.
+ */
+@Composable
+private fun rememberNovaLibraryTopBarFit(
+    available: Dp,
+    largeText: Boolean,
+    hostLabel: String,
+    hostStatus: String?,
+    environment: NovaEnvironmentStrings?,
+    continueCard: NovaTopBarContinue?,
+): NovaTopBarFit {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val base = LocalTextStyle.current
+    val buttonStyle = MaterialTheme.typography.labelLarge
+    val optionsLabel = stringResource(R.string.nova_controller_hint_options)
+    val systemLabel = stringResource(R.string.nova_system_menu_title)
+    return remember(
+        available, largeText, hostLabel, hostStatus, environment, continueCard,
+        density, base, buttonStyle, optionsLabel, systemLabel,
+    ) {
+        if (available == Dp.Infinity || available <= 0.dp) return@remember NovaTopBarFit()
+        with(density) {
+            fun width(text: String, style: TextStyle): Float =
+                if (text.isEmpty()) 0f else measurer.measure(text, style, softWrap = false, maxLines = 1).size.width.toDp().value
+            fun button(text: String, size: TextUnit): Float =
+                width(text, buttonStyle.merge(TextStyle(fontSize = size, fontWeight = FontWeight.SemiBold))) + NOVA_TOP_BAR_BUTTON_PADDING
+            val small = base.merge(TextStyle(fontSize = 10.sp, lineHeight = 12.sp))
+            val iconScale = fontScale.coerceIn(1f, 1.6f)
+            novaLibraryTopBarFit(
+                NovaTopBarWidths(
+                    available = available.value,
+                    gap = NOVA_TOP_BAR_GAP.value,
+                    slack = NOVA_TOP_BAR_SLACK,
+                    hostName = width(hostLabel, base.merge(TextStyle(fontSize = 11.sp, lineHeight = 13.sp))),
+                    hostStatus = hostStatus?.let { width(it, small) } ?: 0f,
+                    identityCap = NOVA_TOP_BAR_IDENTITY_CAP,
+                    identityFloor = NOVA_TOP_BAR_IDENTITY_FLOOR,
+                    space = environment?.let { env ->
+                        // NovaEnvironmentBar, compact: 8 + 10 dp surface padding, a 28 dp avatar
+                        // scaled with text, 8 dp gaps and the 20 sp chevron it always draws.
+                        val chevron = width("›", base.merge(TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))) + 8f
+                        NovaTopBarSpaceWidths(
+                            chrome = 18f + 28f * iconScale + chevron,
+                            columnGap = 8f,
+                            caption = width(env.caption, small),
+                            name = width(env.name, base.merge(TextStyle(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold))),
+                            status = env.status?.let { width(it, base.merge(TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium))) + 16f } ?: 0f,
+                            statusDot = 8f,
+                            statusGap = 6f,
+                            cap = 280f * fontScale.coerceAtLeast(1f),
+                        )
+                    },
+                    continueCard = continueCard?.let { card ->
+                        // NovaLibraryShowcaseContinue: 4 dp start padding, a square cover as tall
+                        // as the strip's inside, 7 dp gaps, and actions at least 88 and 72 dp wide.
+                        val text = maxOf(
+                            width(card.eyebrow.uppercase(), NovaChromeType.label(fontSize = 8.sp)),
+                            width(card.title, base.merge(TextStyle(fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold))),
+                        )
+                        NovaTopBarContinueWidths(
+                            padding = 4f,
+                            cover = if (card.hasCover) {
+                                NovaLibraryUiStateMapper.landscapeShowcaseStripHeightDp(largeText) - 2 * NOVA_TOP_BAR_VERTICAL_PADDING
+                            } else {
+                                0f
+                            },
+                            textMin = minOf(text, 64f),
+                            gap = 7f,
+                            primary = maxOf(88f, button(card.actionLabel, 10.sp)),
+                            secondary = card.secondaryActionLabel?.let { maxOf(72f, button(it, 10.sp)) } ?: 0f,
+                        )
+                    },
+                    options = button(optionsLabel, 11.sp),
+                    system = button(systemLabel, 10.sp),
+                ),
+            )
+        }
     }
 }
 

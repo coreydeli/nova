@@ -447,14 +447,15 @@ class NovaLibraryLayoutV2Test {
             chromeDp <= 120,
         )
 
-        val gridPadding = NovaLibraryUiStateMapper.gridContentPaddingDp()
-        val contentWidthDp = 833 - NovaLibraryUiStateMapper.screenPaddingDp(isLandscape = true) * 2 -
-            gridPadding * 2
-        val rowsHeightDp = viewportDp - gridPadding
+        // No panel frames the grid: its width is the strip's less side padding that lines the
+        // artwork up with the bar, and its height is the whole viewport, the focus rise off the top.
+        val stripWidthDp = 833 - NovaLibraryUiStateMapper.screenPaddingDp(isLandscape = true) * 2
+        fun contentWidthDp(mode: NovaLibraryLayoutMode) =
+            stripWidthDp - NovaLibraryUiStateMapper.gridSidePaddingDp(mode) * 2
 
         val compact = NovaLibraryUiStateMapper.gridViewportSpec(
-            contentWidthDp = contentWidthDp,
-            viewportHeightDp = rowsHeightDp,
+            contentWidthDp = contentWidthDp(NovaLibraryLayoutMode.COMPACT),
+            viewportHeightDp = viewportDp,
             layoutMode = NovaLibraryLayoutMode.COMPACT,
             windowClass = NovaLibraryWindowClass.HANDHELD_LANDSCAPE,
         )
@@ -470,14 +471,23 @@ class NovaLibraryLayoutV2Test {
         )
 
         val grid = NovaLibraryUiStateMapper.gridViewportSpec(
-            contentWidthDp = contentWidthDp,
-            viewportHeightDp = rowsHeightDp,
+            contentWidthDp = contentWidthDp(NovaLibraryLayoutMode.GRID),
+            viewportHeightDp = viewportDp,
             layoutMode = NovaLibraryLayoutMode.GRID,
             windowClass = NovaLibraryWindowClass.HANDHELD_LANDSCAPE,
         )
         assertTrue("grid keeps the larger artwork", grid.posterWidthDp > compact.posterWidthDp)
         assertTrue("grid shows a real peek of the next row, not a sliver", grid.peekDp >= 48)
         assertEquals(grid.posterWidthDp * 3, grid.posterHeightDp * 2)
+        assertEquals(
+            "a focused first-row poster stays whole: the top inset is its focus rise",
+            NovaLibraryUiStateMapper.posterFocusRiseDp(NovaLibraryLayoutMode.COMPACT, compact.posterHeightDp),
+            compact.topInsetDp,
+        )
+        assertEquals(
+            NovaLibraryUiStateMapper.posterFocusRiseDp(NovaLibraryLayoutMode.GRID, grid.posterHeightDp),
+            grid.topInsetDp,
+        )
     }
 
     /**

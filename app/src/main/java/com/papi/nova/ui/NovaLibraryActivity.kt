@@ -30,6 +30,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -71,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -1666,7 +1669,8 @@ class NovaLibraryActivity : NovaActivity() {
                             game = space,
                             displayName = spacesSnapshot?.selected?.name,
                             spaceState = spacesSnapshot?.selected?.state,
-                            onChoose = if ((spacesSnapshot?.spaces?.size ?: 0) > 1 || spacesSnapshot?.desktopAllowed == true) (::showSpaceChooser) else null,
+                            // Always offered: the chooser says why when there is nowhere else to go.
+                            onChoose = ::showSpaceChooser,
                             hostName = serverName.orEmpty().ifBlank { serverHost },
                             activeSession = activeSession,
                             onOpen = { openSpace(space) },
@@ -1686,26 +1690,28 @@ class NovaLibraryActivity : NovaActivity() {
                             modifier = Modifier.fillMaxSize(),
                             reserveControllerHintSpace = true,
                         ) {
+                            // The strip's card is for something to act on now, not the grid's selection.
                             val showContinue = NovaLibraryUiStateMapper.showStandaloneHomeHero(
                                 layoutMode = model.optionsState.layoutMode,
                                 hasActiveSession = activeSession != null,
-                            )
+                            ) && NovaLibraryUiStateMapper.showTopBarCard(model.hero)
                             NovaLibraryLandscapeShowcaseStripContent(
                                 environments = environments,
                                 environmentEnabled = !choosingSpace,
                                 environmentStatusKnown = spacesChecked,
+                                environmentChanging = choosingSpace,
                                 onChooseEnvironment = ::showSpaceChooser,
                                 hostLabel = serverName?.takeIf { it.isNotBlank() } ?: serverHost,
-                                resultCount = model.resultCount,
-                                layoutLabel = layoutModeLabel(model.optionsState.layoutMode),
                                 polarisReady = clientSettings != null,
                                 onOpenOptions = onOpenOptions,
                                 onOpenSystemMenu = onOpenSystemMenu,
+                                continueCard = model.hero.topBarContinue(),
                                 continueSlot = if (showContinue) {
-                                    {
+                                    { fit ->
                                         NovaLibraryShowcaseContinue(
                                             hero = model.hero,
                                             apiClient = apiClient,
+                                            fit = fit,
                                             onPrimaryAction = {
                                                 when (model.hero.primaryAction) {
                                                     NovaLibraryHeroPrimaryAction.RESUME,
@@ -1788,6 +1794,7 @@ class NovaLibraryActivity : NovaActivity() {
                                     spaces = environments,
                                     enabled = !choosingSpace,
                                     statusKnown = spacesChecked,
+                                    changing = choosingSpace,
                                     onChoose = ::showSpaceChooser,
                                     compact = true,
                                     framed = true,
@@ -2282,6 +2289,8 @@ class NovaLibraryActivity : NovaActivity() {
     private fun RowScope.NovaLibraryShowcaseContinue(
         hero: NovaLibraryHeroState,
         apiClient: PolarisApiClient,
+        /** What the strip had room for: the cover goes first, then the words, End Session last. */
+        fit: NovaTopBarFit,
         onPrimaryAction: () -> Unit,
         onSecondaryAction: (() -> Unit)?,
     ) {
@@ -2297,7 +2306,7 @@ class NovaLibraryActivity : NovaActivity() {
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             val game = hero.game
-            if (game != null) {
+            if (game != null && fit.showContinueCover) {
                 val shape = RoundedCornerShape(NovaRadius.chip)
                 Box(
                     modifier = Modifier
@@ -2327,7 +2336,7 @@ class NovaLibraryActivity : NovaActivity() {
                     }
                 }
             }
-            Column(
+            if (fit.showContinueText) Column(
                 modifier = Modifier.weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
@@ -2352,11 +2361,15 @@ class NovaLibraryActivity : NovaActivity() {
                 text = hero.actionLabel,
                 onClick = onPrimaryAction,
                 modifier = Modifier.widthIn(min = 88.dp),
+                // The card's own action is the next step, so it carries the accent; End Session stays quiet.
+                primary = true,
+                // Without the title on screen the action still says what it continues.
+                contentDescription = if (fit.showContinueText) hero.actionLabel else "${hero.actionLabel}, ${hero.title}",
                 minHeight = 30.dp,
                 fontSize = 10.sp,
             )
             val secondaryLabel = hero.secondaryActionLabel
-            if (secondaryLabel != null && onSecondaryAction != null) {
+            if (secondaryLabel != null && onSecondaryAction != null && fit.showContinueSecondary) {
                 NovaActionButton(
                     text = secondaryLabel,
                     onClick = onSecondaryAction,
@@ -2783,7 +2796,7 @@ class NovaLibraryActivity : NovaActivity() {
         )
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
     @Composable
     private fun NovaLibraryContent(
         modifier: Modifier,
@@ -2819,11 +2832,9 @@ class NovaLibraryActivity : NovaActivity() {
                 NovaLibraryRecoveryAction.OPEN_SPACES -> openServerManagementAt("/#/spaces")
             }
         }
-        NovaLibraryPanel(
-            modifier = modifier,
-            subtle = true,
-            cinematic = layoutMode == NovaLibraryLayoutMode.STAGE,
-        ) {
+        // No panel frames the posters: they sit on the backdrop under the top bar, and the
+        // grid lines its artwork up with the bar's content instead of a box's inner edge.
+        Box(modifier = modifier) {
             if (
                 NovaLibraryUiStateMapper.shouldShowLoadFailure(
                     loadErrorMessage = loadErrorMessage,
@@ -2941,22 +2952,29 @@ class NovaLibraryActivity : NovaActivity() {
                         // whole rows in it. Taking a fixed column count and letting the
                         // remainder fall where it may is how the second row came to land
                         // a few dp short and read as clipped rather than as more below.
-                        val gridPaddingDp = NovaLibraryUiStateMapper.gridContentPaddingDp()
+                        val gridSidePaddingDp = NovaLibraryUiStateMapper.gridSidePaddingDp(layoutMode)
                         val viewportSpec = NovaLibraryUiStateMapper.gridViewportSpec(
-                            contentWidthDp = (maxWidth.value.toInt() - gridPaddingDp * 2)
+                            contentWidthDp = (maxWidth.value.toInt() - gridSidePaddingDp * 2)
                                 .coerceAtLeast(1),
-                            viewportHeightDp = (maxHeight.value.toInt() - gridPaddingDp)
-                                .coerceAtLeast(1),
+                            viewportHeightDp = maxHeight.value.toInt().coerceAtLeast(1),
                             layoutMode = layoutMode,
                             windowClass = windowClass,
                         )
+                        // The grid clips at its top edge, so the top inset is the focus rise:
+                        // a focused first-row poster stays whole and never reaches the bar.
+                        // A focus scroll keeps the same margin for rows it brings to the top.
+                        val focusRisePx = with(LocalDensity.current) { viewportSpec.topInsetDp.dp.toPx() }
+                        val focusScrollSpec = remember(focusRisePx) { NovaGridFocusRiseScrollSpec(focusRisePx) }
+                        CompositionLocalProvider(LocalBringIntoViewSpec provides focusScrollSpec) {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(viewportSpec.columns),
-                            modifier = Modifier.fillMaxSize(),
+                            // The last visible row fades out on the grid's own layer; nothing is
+                            // painted over the backdrop, so no box or seam appears where the grid ends.
+                            modifier = Modifier.fillMaxSize().novaLibraryGridBottomFade(NovaLibraryGridScrollFadeHeight),
                             contentPadding = PaddingValues(
-                                start = gridPaddingDp.dp,
-                                top = gridPaddingDp.dp,
-                                end = gridPaddingDp.dp,
+                                start = gridSidePaddingDp.dp,
+                                top = viewportSpec.topInsetDp.dp,
+                                end = gridSidePaddingDp.dp,
                                 bottom = NovaLibraryUiStateMapper.gridBottomContentPaddingDp(isLandscape).dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(
@@ -2988,23 +3006,7 @@ class NovaLibraryActivity : NovaActivity() {
                                 )
                             }
                         }
-                        // The grid scrolls, so its last visible row is cut mid-artwork. A
-                        // short fade reads as there is more below instead of a severed edge.
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .height(NovaLibraryGridScrollFadeHeight)
-                                .background(
-                                    Brush.verticalGradient(
-                                        colorStops = arrayOf(
-                                            0.0f to androidx.compose.ui.graphics.Color.Transparent,
-                                            0.45f to LocalNovaComposeColors.current.window.copy(alpha = 0.62f),
-                                            1.0f to LocalNovaComposeColors.current.window.copy(alpha = 0.95f),
-                                        ),
-                                    ),
-                                ),
-                        )
+                        }
                         }
                     }
                 }
@@ -4298,10 +4300,10 @@ class NovaLibraryActivity : NovaActivity() {
 
         /**
          * Height of the fade at the foot of the scrolling poster grid. It reads as
-         * more content below, and since the hint bar is drawn over the grid rather
-         * than on a slab of its own, it is also the ground those hints are read
-         * against. It has to clear the bar with room to ramp, or the wash ends in a
-         * line and the seam becomes the most visible edge on the screen.
+         * more content below. The grid fades its own pixels (novaLibraryGridBottomFade)
+         * instead of painting a wash: the shell stops the grid above the controller
+         * hints, so a painted wash ended in a line there and, with no panel framing the
+         * grid, read as a second background over the backdrop.
          */
         private val NovaLibraryGridScrollFadeHeight =
             (NovaLibraryUiStateMapper.controllerHintBarMinHeightDp() + 38).dp
@@ -4328,4 +4330,15 @@ class NovaLibraryActivity : NovaActivity() {
         )
         private val ACTIVE_SESSION_RESUME_REFRESH_DELAYS_MS = longArrayOf(1500L, 2000L, 3000L, 5000L, 8000L)
     }
+}
+
+/**
+ * Keeps a poster that focus scrolls to the top of the grid clear of the grid's top edge by
+ * its focus rise, so a lifted row stays whole the way the first row does under its top
+ * inset. The mapper owns the arithmetic so it is tested off the device.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private class NovaGridFocusRiseScrollSpec(private val leadingMarginPx: Float) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+        NovaLibraryUiStateMapper.gridFocusScrollDistance(offset, size, containerSize, leadingMarginPx)
 }

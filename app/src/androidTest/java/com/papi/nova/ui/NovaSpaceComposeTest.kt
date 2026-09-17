@@ -195,6 +195,47 @@ class NovaSpaceComposeTest {
         saveScreenshot("your-space.png")
     }
 
+    @Test fun desktopReadsAsTheComputerAndTheWholeRowOpensTheChooser() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "desktop", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "Alex", "ready", false, true)), desktopAllowed = true)
+        var choices = 0
+        compose.setContent { NovaComposeTheme {
+            NovaEnvironmentBar(snapshot, true, { choices++ }, modifier = Modifier.requiredSize(560.dp, 70.dp), compact = true)
+        } }
+        compose.onNodeWithText("This computer").assertIsDisplayed()
+        compose.onNodeWithText("Your Space").assertDoesNotExist()
+        compose.onNodeWithTag("nova-environment-choose").assertHasClickAction().performClick()
+        compose.runOnIdle { assertEquals(1, choices) }
+        saveScreenshot("space-control-desktop.png")
+    }
+
+    @Test fun oneEnvironmentStillOpensTheChooser() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "alex", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "Alex", "ready", true, true)))
+        var choices = 0
+        compose.setContent { NovaComposeTheme {
+            NovaEnvironmentBar(snapshot, true, { choices++ }, modifier = Modifier.requiredSize(560.dp, 70.dp), compact = true)
+        } }
+        compose.onNodeWithText("Alex").assertIsDisplayed()
+        compose.onNodeWithTag("nova-environment-choose").assertHasClickAction().performClick()
+        compose.runOnIdle { assertEquals(1, choices) }
+    }
+
+    @Test fun chooserWithoutDesktopAccessSaysWhereToTurnItOn() {
+        val snapshot = com.papi.nova.api.PolarisSpaces(true, true, true, "alex", listOf(
+            com.papi.nova.api.PolarisSpace("alex", "papi - steam", "ready", true, true)))
+        var choice = ""
+        compose.setContent { NovaComposeTheme {
+            NovaSpaceChooser(snapshot, busy = false, statusKnown = true, error = null, onChoose = { choice = it }, onBack = {})
+        } }
+        compose.onNodeWithText("papi - steam is the only place this device can play right now.").assertIsDisplayed()
+        compose.onNodeWithText("Desktop Access is off for this device. Turn it on from the Spaces page in Polaris.", useUnmergedTree = true)
+            .assertIsDisplayed()
+        compose.onNodeWithTag("nova-space-choice-desktop").performClick()
+        compose.runOnIdle { assertEquals("a row without Desktop Access chooses nothing", "", choice) }
+        saveScreenshot("choose-no-desktop-access.png")
+    }
+
     private fun saveScreenshot(name: String) {
         val image = compose.onRoot().captureToImage()
         val bitmap = image.asAndroidBitmap()

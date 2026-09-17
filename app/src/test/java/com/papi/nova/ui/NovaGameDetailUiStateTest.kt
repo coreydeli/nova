@@ -560,4 +560,55 @@ class NovaGameDetailUiStateTest {
         launchMode = launchMode,
         steamLaunch = steamLaunch
     )
+
+
+    @Test
+    fun aSpaceGameRunsInItsSpaceInsteadOfFallingBack() {
+        // The host lists only a Space's own mode for its games, so the host default looked
+        // unavailable and every Space launch said twice that Private Stream was not ready.
+        fun settings() = PolarisClientSettings(
+            desired = PolarisClientSettings.Desired(streamDisplayMode = PolarisGame.MODE_HEADLESS_STREAM),
+            capabilities = PolarisClientSettings.Capabilities(
+                modes = listOf(
+                    PolarisClientSettings.ModeOption(value = PolarisGame.MODE_HEADLESS_STREAM, available = true),
+                    PolarisClientSettings.ModeOption(
+                        value = PolarisGame.MODE_GAMESCOPE_STREAM,
+                        available = true,
+                        sessionOverridable = true,
+                    ),
+                ),
+            ),
+        )
+        val launchMode = PolarisGame.LaunchModeContract(
+            recommendedMode = PolarisGame.MODE_GAMESCOPE_STREAM,
+            allowedModes = listOf(PolarisGame.MODE_GAMESCOPE_STREAM),
+        )
+        val desktop = NovaGameDetailUiState.from(
+            game = game(launchMode = launchMode),
+            defaultToVirtualDisplay = false,
+            clientSettings = settings(),
+            profilePreference = "auto",
+        )
+        val space = NovaGameDetailUiState.from(
+            game = game(launchMode = launchMode).copy(
+                id = "space.15ab1141-72db-4e28-a138-463a0dd1d98a.big-picture-v1",
+                space = PolarisGame.SpaceContext(
+                    id = "15ab1141-72db-4e28-a138-463a0dd1d98a",
+                    name = "Living room",
+                    target = "big-picture-v1",
+                ),
+            ),
+            defaultToVirtualDisplay = false,
+            clientSettings = settings(),
+            profilePreference = "auto",
+        )
+
+        // The same mode is carried for the launch either way; only what it means differs.
+        assertEquals(PolarisGame.MODE_GAMESCOPE_STREAM, desktop.launchStreamMode)
+        assertEquals(PolarisGame.MODE_GAMESCOPE_STREAM, space.launchStreamMode)
+        assertFalse(desktop.runsInSpace)
+        assertTrue("a Desktop game with an unavailable host default still falls back", desktop.usesSafeHostFallback)
+        assertTrue(space.runsInSpace)
+        assertFalse("a Space game runs in its Space; that is not a fallback", space.usesSafeHostFallback)
+    }
 }

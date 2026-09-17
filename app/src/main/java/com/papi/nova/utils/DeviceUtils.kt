@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
+import com.papi.nova.BuildConfig
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
@@ -286,6 +287,32 @@ object DeviceUtils {
         val model = Build.MODEL
         return model?.trim()?.replace("\\s*".toRegex(), "") ?: ""
     }
+
+    /**
+     * The name this install pairs under.
+     *
+     * The release app keeps the model, the name every host already lists it by. A debug,
+     * pre-release, dirty, benchmark or root build installs beside it as an app of its own with
+     * a pairing of its own, and all of them paired as the same model, so a host listed two
+     * identical devices and the person had to guess which was which. Those builds add what
+     * they are. Only the pairing name changes: the model stays the device key every other
+     * request uses.
+     */
+    @JvmStatic
+    fun getPairingName(): String = pairingName(getModel(), BuildConfig.APPLICATION_ID)
+
+    internal fun pairingName(model: String, applicationId: String): String {
+        if (applicationId == RELEASE_APPLICATION_ID || !applicationId.startsWith("$RELEASE_APPLICATION_ID.")) {
+            return model
+        }
+        val builds = applicationId.removePrefix("$RELEASE_APPLICATION_ID.")
+            .split('.')
+            .filter { it.isNotBlank() }
+            .map { part -> part.replaceFirstChar { it.uppercase() } }
+        return (listOf(model) + builds).filter { it.isNotBlank() }.joinToString(" ")
+    }
+
+    private const val RELEASE_APPLICATION_ID = "com.papi.nova"
 
     /**
      * Return an ordered list of ABIs supported by this device. The most preferred ABI is the first

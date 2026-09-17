@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+## 1.4.9 - 2026-09-16
+
+A calmer library and a Play Setup that says where your game opens. Nova 1.4.9 is matched with Polaris 1.4.9, bringing a tidier top bar, Steam Big Picture that moves with you between Desktop and your Spaces, and more room for your posters.
+
+**A Calmer Top Bar**
+
+- The landscape top bar keeps two groups: the host on the left, and your Space, Options and System together on the right. The Space control sits directly left of Options instead of floating in the middle.
+- Your Space is always a button. The chooser always lists Desktop, and when Desktop Access is off for this device it says so and points to the Spaces page in Polaris. A device with only one place to play is told that plainly.
+- Desktop reads as This computer rather than Your Space, and Space initials ignore symbols in a name.
+- The bar never scrolls sideways. On a narrow screen or with larger text it lets the least important details go first, and Options and System always keep their full size.
+- The result count and layout name leave the bar. The Options sheet already shows the count beside its title and offers the layout.
+- A card appears in the bar only for something to do right now: a live game, with Resume Stream highlighted and End Session beside it, or a library that is empty or hidden by filters.
+
+**A Clearer Play Setup**
+
+- Steam Big Picture in a Space and Steam Big Picture on Desktop count as the same place to play, so Play Setup can move between them. This needs Polaris 1.4.9, which marks its Desktop Big Picture entry.
+- A place you cannot choose says why and where to go instead, such as Change Space in the Library.
+- A game in a Space says once that it runs there with its own Steam sign-in and saves, and shows what the Space resolved, without a fallback warning or a profile label.
+- Where a game opens is one set of cards at the top of Play Setup, and the place it opens in takes focus first.
+- The plan column fits the screen, so its last lines are no longer cut off on 1920x1080 handhelds.
+
+**Room for Your Posters**
+
+- Posters sit directly on the backdrop, lined up with the top bar, with no box around them and more room for your library.
+- A focused poster has room to rise without touching the top bar, including after scrolling.
+- The backdrop uses a game's real hero artwork. Entries without one, such as Desktop, show the ambient background instead of a stretched poster.
+- The backdrop no longer fades out and back in when the library refreshes play times, and the bottom of the poster wall fades without a darker band.
+
+**For Testers**
+
+- Nova builds installed beside the release app, such as Nova Debug, pair under their own name, for example RetroidPocket6 Debug, so a host lists them apart.
+
+Steam Big Picture pairing in Play Setup needs Polaris 1.4.9. Everything else works with the Polaris you already run, and the Spaces pieces with any Polaris host that offers Spaces. Spaces remains an early preview for configured Polaris hosts.
+
 ## 1.4.8 - 2026-09-16
 
 More of your library, right where you play. Nova 1.4.8 is matched with Polaris 1.4.8, bringing a familiar game library to Spaces, more frame-rate choices and controller settings that fit each game.

@@ -1,0 +1,7 @@
+Nova 1.4.9
+
+A calmer top bar: your Space, Options and System sit together, the bar never scrolls, and Resume Stream stands out when a game is live.
+
+Play Setup shows where a game opens as one set of cards, explains places you cannot choose, and pairs Steam Big Picture between Desktop and your Spaces with Polaris 1.4.9.
+
+Posters sit right on the backdrop with more room, and games without hero art keep a calm background.

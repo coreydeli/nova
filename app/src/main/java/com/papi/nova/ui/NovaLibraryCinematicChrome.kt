@@ -24,8 +24,11 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -33,6 +36,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -46,11 +50,64 @@ import com.papi.nova.ui.compose.LocalNovaMenuOpacityScale
 import com.papi.nova.ui.compose.NovaChromeType
 import com.papi.nova.ui.compose.NovaControllerHint
 
-private data class NovaLibraryCinematicBackdropTarget(
+/**
+ * What the backdrop crossfades between. Two targets are the same backdrop when they draw the
+ * same artwork, whatever else changed about the game: a library refresh that only moves
+ * last-launched or play time must not fade the one full-screen layer out and back in. The
+ * presentation key already carries the game, the artwork revision and the asset URL, so it and
+ * the artwork kind are the identity; the game rides along for the first load.
+ */
+internal class NovaLibraryCinematicBackdropTarget(
     val game: PolarisGame,
     val artworkKind: String,
     val presentationKey: String,
-)
+) {
+    override fun equals(other: Any?): Boolean = other is NovaLibraryCinematicBackdropTarget &&
+        other.artworkKind == artworkKind && other.presentationKey == presentationKey
+
+    override fun hashCode(): Int = 31 * artworkKind.hashCode() + presentationKey.hashCode()
+}
+
+internal fun novaLibraryCinematicBackdropTarget(game: PolarisGame?): NovaLibraryCinematicBackdropTarget? =
+    game?.let { game ->
+        // One rule for every entry, owned by the mapper: a real hero, or the ambient field.
+        // A poster stretched full-bleed was a slice of its wordmark behind the whole screen,
+        // and Big Picture's bundled Steam mark was a grey smear; neither is drawn now.
+        val artworkKind = NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game) ?: return@let null
+        NovaLibraryCinematicBackdropTarget(
+            game = game,
+            artworkKind = artworkKind,
+            presentationKey = PolarisApiClient.artworkPresentationKey(game, artworkKind),
+        )
+    }
+
+/**
+ * Fades the poster grid's own pixels out toward its bottom edge and paints nothing. The shared
+ * cinematic backdrop is the one ground under the library. A wash painted in window colour over
+ * the grid's bounds stopped at the grid's edge, above the controller hints, and once no panel
+ * framed the grid that edge read as a second, darker background laid over the first (papi,
+ * 2026-09-16: "it doubles in Grid and Compact"). Offscreen compositing keeps DstIn to the
+ * grid's own layer, so the backdrop behind it is never touched.
+ */
+internal fun Modifier.novaLibraryGridBottomFade(height: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = height.toPx().coerceIn(0f, size.height)
+        if (fade <= 0f) return@drawWithContent
+        drawRect(
+            brush = Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.0f to Color.Black,
+                    0.45f to Color.Black.copy(alpha = 0.38f),
+                    1.0f to Color.Transparent,
+                ),
+                startY = size.height - fade,
+                endY = size.height,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
 
 @Composable
 internal fun NovaLibraryCinematicBackdrop(
@@ -66,22 +123,7 @@ internal fun NovaLibraryCinematicBackdrop(
 ) {
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
-    val backdropTarget = game?.let { game ->
-        // Big Picture's bundled Steam mark is not artwork; stretched full-bleed it was a grey
-        // smear behind the stage. The ambient field stands in for it.
-        if (game.space?.target == "big-picture-v1") return@let null
-        // A hero is asked for only when the host lists one for this game: cached for a
-        // desktop title, listed at all for a Space title (its route resolves on the host).
-        // Every Space game used to ask for one and take the miss.
-        val hasCachedHero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO)?.cached == true ||
-            (game.space != null && game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO) != null)
-        val artworkKind = if (hasCachedHero) PolarisGame.ARTWORK_KIND_HERO else PolarisGame.ARTWORK_KIND_POSTER
-        NovaLibraryCinematicBackdropTarget(
-            game = game,
-            artworkKind = artworkKind,
-            presentationKey = PolarisApiClient.artworkPresentationKey(game, artworkKind),
-        )
-    }
+    val backdropTarget = novaLibraryCinematicBackdropTarget(game)
 
     Box(
         modifier = modifier
@@ -120,11 +162,7 @@ internal fun NovaLibraryCinematicBackdrop(
                             if (view.getTag(R.id.nova_artwork_presentation_key) != target.presentationKey) {
                                 view.setTag(R.id.nova_artwork_presentation_key, target.presentationKey)
                                 view.setImageDrawable(null)
-                                if (target.artworkKind == PolarisGame.ARTWORK_KIND_HERO) {
-                                    apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)
-                                } else {
-                                    apiClient.loadCoverInto(view, target.game)
-                                }
+                                apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)
                             }
                         },
                         modifier = Modifier
