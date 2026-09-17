@@ -2,6 +2,7 @@ package com.papi.nova.ui
 
 import com.papi.nova.shared.polaris.model.PolarisGame
 import com.papi.nova.api.PolarisSessionStatus
+import kotlin.math.abs
 import kotlin.math.ceil
 
 enum class NovaLibraryPrimaryFilter {
@@ -1171,6 +1172,12 @@ object NovaLibraryUiStateMapper {
      * scrolled to the top never sits closer to the grid's top edge than [leadingMargin],
      * the focus rise, so its lifted artwork stays whole the way the first row's does; at
      * the bottom the poster only has to be inside, because the lift moves it up.
+     *
+     * A poster taller than the grid (a very short window, where the viewport falls back to
+     * zero full rows) fits neither way, and asking for the top edge and then the bottom edge
+     * in turn never settles: the grid would flip between them on every focus pass. Such a
+     * poster follows Compose's default rule instead: left alone while it spans both edges,
+     * otherwise the nearer edge is aligned, which settles after one move.
      */
     fun gridFocusScrollDistance(
         offset: Float,
@@ -1178,8 +1185,15 @@ object NovaLibraryUiStateMapper {
         containerSize: Float,
         leadingMargin: Float,
     ): Float {
-        val margin = leadingMargin.coerceAtMost((containerSize - size).coerceAtLeast(0f)).coerceAtLeast(0f)
         val trailingEdge = offset + size
+        if (size > containerSize) {
+            return when {
+                offset < 0f && trailingEdge > containerSize -> 0f
+                abs(offset) < abs(trailingEdge - containerSize) -> offset
+                else -> trailingEdge - containerSize
+            }
+        }
+        val margin = leadingMargin.coerceAtMost(containerSize - size).coerceAtLeast(0f)
         return when {
             offset < margin -> offset - margin
             trailingEdge > containerSize -> trailingEdge - containerSize

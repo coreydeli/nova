@@ -105,6 +105,35 @@ class NovaLibraryOpenGridTest {
     }
 
     @Test
+    fun aPosterTallerThanTheGridSettlesInsteadOfFlippingBetweenEdges() {
+        val margin = 14f
+        val container = 100f
+        val size = 150f
+        // Spanning both edges: nothing to do, as Compose's default rule says.
+        assertEquals(0f, NovaLibraryUiStateMapper.gridFocusScrollDistance(-10f, size, container, margin), 0.001f)
+        // Top edge inside: align it, then stay.
+        assertEquals(20f, NovaLibraryUiStateMapper.gridFocusScrollDistance(20f, size, container, margin), 0.001f)
+        assertEquals(0f, NovaLibraryUiStateMapper.gridFocusScrollDistance(0f, size, container, margin), 0.001f)
+        // Bottom edge inside and nearer: align the bottom edge, then stay.
+        assertEquals(-10f, NovaLibraryUiStateMapper.gridFocusScrollDistance(-60f, size, container, margin), 0.001f)
+        assertEquals(0f, NovaLibraryUiStateMapper.gridFocusScrollDistance(-50f, size, container, margin), 0.001f)
+        // From any start, repeated focus passes reach no scroll and keep it. The old rule asked
+        // for the top margin and the bottom edge in turn, so the distance never reached zero.
+        listOf(-120f, -60f, -10f, 0f, 30f, 200f).forEach { start ->
+            var offset = start
+            repeat(3) {
+                offset -= NovaLibraryUiStateMapper.gridFocusScrollDistance(offset, size, container, margin)
+            }
+            assertEquals(
+                "a poster taller than the grid, starting at $start, settles",
+                0f,
+                NovaLibraryUiStateMapper.gridFocusScrollDistance(offset, size, container, margin),
+                0.001f,
+            )
+        }
+    }
+
+    @Test
     fun theBackdropDrawsOnlyARealHero() {
         val cachedHero = PolarisGame.ArtworkAsset(url = "/hero", cached = true)
         val listedHero = PolarisGame.ArtworkAsset(url = "/hero", cached = false)
