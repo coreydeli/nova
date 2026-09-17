@@ -246,8 +246,8 @@ internal fun NovaLibraryPortraitToolbarContent(
 }
 
 /**
- * Landscape draws identity, the continue action, the result count, the Space control and the two
- * menu buttons in one row.
+ * Landscape draws the host, a card when there is something to act on now, the Space control and the
+ * two menu buttons in one row.
  *
  * A toolbar stacked above a continue card spent the width twice. The toolbar
  * carried an empty gap almost two thirds of the screen wide between the host
@@ -264,12 +264,16 @@ internal fun NovaLibraryPortraitToolbarContent(
  * parts are measured and [novaLibraryTopBarFit] leaves out what it must, in a fixed order, and the
  * Space control sits in the right-hand cluster directly left of Options instead of floating beside
  * the host.
+ *
+ * Three things changed after papi saw that on the Retroid (2026-09-16 21:27). The result count and
+ * layout name left the strip for the Options sheet, where they already were. The Space control is a
+ * control even when this device has nowhere else to go, so pressing it always reaches the chooser,
+ * which says why. And the card only appears for something to act on now (a live game, an empty
+ * library, filters that hide everything), never as a copy of the game selected in the grid.
  */
 @Composable
 internal fun NovaLibraryLandscapeShowcaseStripContent(
     hostLabel: String,
-    resultCount: Int,
-    layoutLabel: String,
     polarisReady: Boolean,
     onOpenOptions: () -> Unit,
     onOpenSystemMenu: () -> Unit,
@@ -287,7 +291,6 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val shape = RoundedCornerShape(NovaRadius.row)
     val hostStatus = if (polarisReady) stringResource(R.string.nova_system_menu_status_polaris_ready) else null
-    val resultText = stringResource(R.string.nova_library_results_format, resultCount)
     val environment = environments?.let {
         rememberNovaEnvironmentStrings(it, environmentStatusKnown, environmentChanging)
     }
@@ -297,8 +300,6 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
             largeText = largeText,
             hostLabel = hostLabel,
             hostStatus = hostStatus,
-            resultText = resultText,
-            layoutLabel = layoutLabel,
             environment = environment,
             continueCard = if (continueSlot != null) continueCard else null,
         )
@@ -343,13 +344,6 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                 }
-            }
-            if (fit.showMeta) {
-                NovaLibraryResultAndLayoutMeta(
-                    resultCount = resultCount,
-                    layoutLabel = layoutLabel,
-                    cinematic = true,
-                )
             }
             if (environments != null) {
                 // Directly left of Options, with the same gap as Options and System: the Space is
@@ -401,8 +395,6 @@ private fun rememberNovaLibraryTopBarFit(
     largeText: Boolean,
     hostLabel: String,
     hostStatus: String?,
-    resultText: String,
-    layoutLabel: String,
     environment: NovaEnvironmentStrings?,
     continueCard: NovaTopBarContinue?,
 ): NovaTopBarFit {
@@ -413,7 +405,7 @@ private fun rememberNovaLibraryTopBarFit(
     val optionsLabel = stringResource(R.string.nova_controller_hint_options)
     val systemLabel = stringResource(R.string.nova_system_menu_title)
     return remember(
-        available, largeText, hostLabel, hostStatus, resultText, layoutLabel, environment, continueCard,
+        available, largeText, hostLabel, hostStatus, environment, continueCard,
         density, base, buttonStyle, optionsLabel, systemLabel,
     ) {
         if (available == Dp.Infinity || available <= 0.dp) return@remember NovaTopBarFit()
@@ -433,7 +425,6 @@ private fun rememberNovaLibraryTopBarFit(
                     hostStatus = hostStatus?.let { width(it, small) } ?: 0f,
                     identityCap = NOVA_TOP_BAR_IDENTITY_CAP,
                     identityFloor = NOVA_TOP_BAR_IDENTITY_FLOOR,
-                    meta = minOf(132f, width(resultText, small) + 6f + width(layoutLabel, small)),
                     space = environment?.let { env ->
                         // NovaEnvironmentBar, compact: 8 + 10 dp surface padding, a 28 dp avatar
                         // scaled with text, 8 dp gaps and the 20 sp chevron it always draws.

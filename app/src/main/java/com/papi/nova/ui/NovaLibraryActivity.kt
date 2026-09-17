@@ -1687,10 +1687,11 @@ class NovaLibraryActivity : NovaActivity() {
                             modifier = Modifier.fillMaxSize(),
                             reserveControllerHintSpace = true,
                         ) {
+                            // The strip's card is for something to act on now, not the grid's selection.
                             val showContinue = NovaLibraryUiStateMapper.showStandaloneHomeHero(
                                 layoutMode = model.optionsState.layoutMode,
                                 hasActiveSession = activeSession != null,
-                            )
+                            ) && NovaLibraryUiStateMapper.showTopBarCard(model.hero)
                             NovaLibraryLandscapeShowcaseStripContent(
                                 environments = environments,
                                 environmentEnabled = !choosingSpace,
@@ -1698,8 +1699,6 @@ class NovaLibraryActivity : NovaActivity() {
                                 environmentChanging = choosingSpace,
                                 onChooseEnvironment = ::showSpaceChooser,
                                 hostLabel = serverName?.takeIf { it.isNotBlank() } ?: serverHost,
-                                resultCount = model.resultCount,
-                                layoutLabel = layoutModeLabel(model.optionsState.layoutMode),
                                 polarisReady = clientSettings != null,
                                 onOpenOptions = onOpenOptions,
                                 onOpenSystemMenu = onOpenSystemMenu,

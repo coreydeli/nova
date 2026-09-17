@@ -16,8 +16,6 @@ class NovaLibraryTopBarFitTest {
     private object Retroid {
         const val HOST_NAME = 49f // "pc-papi.lan"
         const val HOST_STATUS = 53f // "Polaris ready"
-        const val COUNT = 34f // "2 shown"
-        const val LAYOUT = 23f // "Stage"
         const val CAPTION = 45f // "Your Space"
         const val SPACE_NAME = 65f // "papi - steam"
         const val CHEVRON = 5f // "›"
@@ -49,7 +47,6 @@ class NovaLibraryTopBarFitTest {
             hostStatus = Retroid.HOST_STATUS * k,
             identityCap = 168f,
             identityFloor = 56f,
-            meta = minOf(132f, (Retroid.COUNT + Retroid.LAYOUT) * k + 6f),
             space = if (!spaces) null else NovaTopBarSpaceWidths(
                 chrome = 18f + 28f * iconScale + Retroid.CHEVRON * k + 8f,
                 columnGap = 8f,
@@ -98,11 +95,12 @@ class NovaLibraryTopBarFitTest {
     }
 
     @Test
-    fun atDefaultTextTheCountAndLayoutGoFirstAndNothingElse() {
+    fun atDefaultTextALiveLibraryKeepsEverything() {
+        // With the count and layout name out of the strip, a live Grid library at font scale 1.0
+        // no longer has to give anything up.
         val widths = widths(fontScale = 1f, playing = true, live = true)
         val fit = novaLibraryTopBarFit(widths)
-        assertFalse(fit.showMeta)
-        assertEquals("only the count and layout give way", NovaTopBarFit(showMeta = false), fit)
+        assertEquals(NovaTopBarFit(), fit)
         fits(widths, fit)
     }
 
@@ -112,7 +110,6 @@ class NovaLibraryTopBarFitTest {
         val fit = novaLibraryTopBarFit(widths)
         assertEquals(
             NovaTopBarFit(
-                showMeta = false,
                 showSpaceCaption = false,
                 showHostStatus = false,
                 showContinueCover = false,
@@ -175,7 +172,6 @@ class NovaLibraryTopBarFitTest {
                 val widths = widths(fontScale = scale, stripWidth = strip, playing = true, live = true)
                 val fit = novaLibraryTopBarFit(widths)
                 val right = listOfNotNull(
-                    widths.meta.takeIf { fit.showMeta },
                     widths.space?.let { novaTopBarSpaceWidth(it, fit) },
                     widths.options,
                     widths.system,
@@ -189,24 +185,53 @@ class NovaLibraryTopBarFitTest {
         }
     }
 
+    private fun hero(
+        secondaryLabel: String? = null,
+        secondary: NovaLibraryHeroSecondaryAction? = null,
+        reason: NovaLibraryHeroReason = NovaLibraryHeroReason.ACTIVE_SESSION,
+        primary: NovaLibraryHeroPrimaryAction = NovaLibraryHeroPrimaryAction.RESUME,
+        eyebrow: String = "Resume your stream",
+    ) = NovaLibraryHeroState(
+        game = null,
+        title = "Animal Well",
+        subtitle = "",
+        caption = "",
+        eyebrow = eyebrow,
+        actionLabel = "Resume Stream",
+        badges = emptyList(),
+        reason = reason,
+        primaryAction = primary,
+        supportingLine = "",
+        artworkFallbackTitle = "",
+        artworkFallbackSubtitle = "",
+        secondaryActionLabel = secondaryLabel,
+        secondaryAction = secondary,
+    )
+
+    @Test
+    fun theStripCardIsOnlyForSomethingToActOnNow() {
+        assertTrue("a live game to resume or end", NovaLibraryUiStateMapper.showTopBarCard(hero()))
+        assertTrue(
+            "an empty library to manage",
+            NovaLibraryUiStateMapper.showTopBarCard(hero(reason = NovaLibraryHeroReason.EMPTY, primary = NovaLibraryHeroPrimaryAction.MANAGE_LIBRARY)),
+        )
+        assertTrue(
+            "filters that hide everything",
+            NovaLibraryUiStateMapper.showTopBarCard(hero(reason = NovaLibraryHeroReason.EMPTY, primary = NovaLibraryHeroPrimaryAction.CLEAR_FILTERS)),
+        )
+        for (reason in listOf(NovaLibraryHeroReason.LAST_PLAYED, NovaLibraryHeroReason.FIRST_FILTERED, NovaLibraryHeroReason.FIRST_LIBRARY_GAME)) {
+            for (primary in listOf(NovaLibraryHeroPrimaryAction.OPEN_DETAIL, NovaLibraryHeroPrimaryAction.OPEN_SPACE)) {
+                assertFalse(
+                    "a selected or last played game is already on the grid; the card repeated it as \"Selected Game, Open\" " +
+                        "in the bar (papi, 2026-09-16 21:27): $reason $primary",
+                    NovaLibraryUiStateMapper.showTopBarCard(hero(reason = reason, primary = primary, eyebrow = "Selected Game")),
+                )
+            }
+        }
+    }
+
     @Test
     fun theContinueCardIsMeasuredByTheRulesItDrawsWith() {
-        fun hero(secondaryLabel: String?, secondary: NovaLibraryHeroSecondaryAction?) = NovaLibraryHeroState(
-            game = null,
-            title = "Animal Well",
-            subtitle = "",
-            caption = "",
-            eyebrow = "Resume your stream",
-            actionLabel = "Resume Stream",
-            badges = emptyList(),
-            reason = NovaLibraryHeroReason.ACTIVE_SESSION,
-            primaryAction = NovaLibraryHeroPrimaryAction.RESUME,
-            supportingLine = "",
-            artworkFallbackTitle = "",
-            artworkFallbackSubtitle = "",
-            secondaryActionLabel = secondaryLabel,
-            secondaryAction = secondary,
-        )
         val owned = hero("End Session", NovaLibraryHeroSecondaryAction.END_SESSION).topBarContinue()
         assertEquals("End Session", owned.secondaryActionLabel)
         assertFalse("no game, no cover to measure", owned.hasCover)

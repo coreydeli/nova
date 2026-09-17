@@ -11,15 +11,18 @@ package com.papi.nova.ui
  * measures each part at the current font scale and this function decides, in a fixed order, what
  * to leave out until the row fits:
  *
- * 1. the result count and layout name,
- * 2. the Space control's caption line (avatar, name and chevron stay),
- * 3. the host's status line,
- * 4. the continue card's cover,
- * 5. the continue card's eyebrow and title (its actions stay),
- * 6. the words of the Space's status badge (a dot stays),
- * 7. the Space name, which ellipsizes and at the last goes, leaving avatar and chevron,
- * 8. the host name, which ellipsizes down to [NovaTopBarWidths.identityFloor],
- * 9. End Session on the continue card, only when nothing else was enough.
+ * 1. the Space control's caption line (avatar, name and chevron stay),
+ * 2. the host's status line,
+ * 3. the card's cover,
+ * 4. the card's eyebrow and title (its actions stay),
+ * 5. the words of the Space's status badge (a dot stays),
+ * 6. the Space name, which ellipsizes and at the last goes, leaving avatar and chevron,
+ * 7. the host name, which ellipsizes down to [NovaTopBarWidths.identityFloor],
+ * 8. End Session on the card, only when nothing else was enough.
+ *
+ * The result count and layout name are not in the strip any more. They read as a stray label in
+ * the right-hand cluster (papi, 2026-09-16 21:27), and both already live in the Options sheet: the
+ * count beside its title, the layout among its choices.
  *
  * Options and System never shrink or move: the composable measures the right cluster before the
  * left, so a residual mismatch squeezes the host side, never the menus.
@@ -73,11 +76,9 @@ internal data class NovaTopBarWidths(
     val hostStatus: Float,
     val identityCap: Float,
     val identityFloor: Float,
-    /** The result count and layout name, or 0 when they are absent. */
-    val meta: Float,
     /** Null on a host without Spaces. */
     val space: NovaTopBarSpaceWidths?,
-    /** Null when the layout draws no continue card (Stage). */
+    /** Null when the strip draws no card: Stage, or nothing to act on now. */
     val continueCard: NovaTopBarContinueWidths?,
     val options: Float,
     val system: Float,
@@ -85,7 +86,6 @@ internal data class NovaTopBarWidths(
 
 /** What the strip shows once it fits. */
 internal data class NovaTopBarFit(
-    val showMeta: Boolean = true,
     val showSpaceCaption: Boolean = true,
     val showHostStatus: Boolean = true,
     val showContinueCover: Boolean = true,
@@ -142,7 +142,6 @@ internal fun novaTopBarRequiredWidth(widths: NovaTopBarWidths, fit: NovaTopBarFi
     val left = novaTopBarIdentityWidth(widths, fit) + widths.gap + middle
     // Right: what can be pressed, ending in Options and System.
     val right = buildList {
-        if (fit.showMeta && widths.meta > 0f) add(widths.meta)
         widths.space?.let { add(novaTopBarSpaceWidth(it, fit)) }
         add(widths.options)
         add(widths.system)
@@ -187,7 +186,6 @@ private fun fitTopBar(widths: NovaTopBarWidths): NovaTopBarFit {
     var fit = NovaTopBarFit()
     fun over() = novaTopBarOverflow(widths, fit)
     val steps: List<(NovaTopBarFit) -> NovaTopBarFit> = listOf(
-        { it.copy(showMeta = false) },
         { it.copy(showSpaceCaption = false) },
         { it.copy(showHostStatus = false) },
         { it.copy(showContinueCover = false) },

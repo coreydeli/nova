@@ -1327,6 +1327,15 @@ object NovaLibraryUiStateMapper {
         hasActiveSession: Boolean,
     ): Boolean = layoutMode != NovaLibraryLayoutMode.STAGE
 
+    /**
+     * Whether the landscape strip's card has something to act on now: a live game to resume or
+     * end, or a library that is empty or hidden by filters. A selected or last played game is
+     * already on the grid; a card repeating it read as "Selected Game, Open" in the bar (papi,
+     * 2026-09-16 21:27).
+     */
+    fun showTopBarCard(hero: NovaLibraryHeroState): Boolean =
+        hero.reason == NovaLibraryHeroReason.ACTIVE_SESSION || hero.reason == NovaLibraryHeroReason.EMPTY
+
     fun showLandscapeRecentRail(
         screenHeightDp: Int,
         heroReason: NovaLibraryHeroReason,

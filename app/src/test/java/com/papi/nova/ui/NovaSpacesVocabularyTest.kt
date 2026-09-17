@@ -86,14 +86,18 @@ class NovaSpacesVocabularyTest {
         assertFalse("the host identity is not the else branch of the Space row", strip.contains("} else NovaLibraryToolbarIdentity("))
         val identity = strip.indexOf("NovaLibraryToolbarIdentity(")
         val middle = strip.indexOf("continueSlot(fit)")
-        val meta = strip.indexOf("NovaLibraryResultAndLayoutMeta(")
         val space = strip.indexOf("NovaEnvironmentBar(")
         val options = strip.indexOf("NovaLibraryToolbarOptionsAction(")
         val system = strip.indexOf("NovaLibraryToolbarSystemAction(")
         assertTrue(
-            "host first and the continue card in the middle; then count, Space, Options and System as one right-hand " +
-                "cluster. Beside the host the Space control read as floating in the middle of the strip (papi, 2026-09-16)",
-            identity in 0 until middle && middle < meta && meta < space && space < options && options < system,
+            "host first and the card in the middle; then Space, Options and System as one right-hand cluster. Beside the " +
+                "host the Space control read as floating in the middle of the strip (papi, 2026-09-16)",
+            identity in 0 until middle && middle < space && space < options && options < system,
+        )
+        assertFalse(
+            "the result count and layout name read as a stray label beside the Space control; both live in the Options " +
+                "sheet (papi, 2026-09-16 21:27: \"can get rid of 2 Shown and Grid\")",
+            strip.contains("NovaLibraryResultAndLayoutMeta(") || strip.contains("nova_library_results_format"),
         )
     }
 
@@ -123,6 +127,10 @@ class NovaSpacesVocabularyTest {
         assertFalse(
             "the Space screen hid Change Space unless there was another place to go, which left nothing to press",
             activity.contains("desktopAllowed == true) (::showSpaceChooser) else null"),
+        )
+        assertTrue(
+            "the strip's card is for something to act on now, never a copy of the grid's selection",
+            activity.contains(") && NovaLibraryUiStateMapper.showTopBarCard(model.hero)"),
         )
         val strip = landscapeStrip()
         assertFalse("a fixed 300 dp slot is what pushed the button into the middle", strip.contains("width(300.dp"))
