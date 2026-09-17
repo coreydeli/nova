@@ -29,6 +29,14 @@ enum class DeckGamepadAction {
 
 DeckGamepadAction decodeGamepadAction(const DeckGamepadEvent& event);
 
+struct DeckGamepadHatAxes {
+    int horizontal = -1;
+    int vertical = -1;
+};
+
+using DeckGamepadIoctl = int (*)(int, unsigned long, void*);
+DeckGamepadHatAxes readDeckGamepadHatAxes(int fd, DeckGamepadIoctl query = nullptr);
+
 // Axis numbers come from JSIOCGAXMAP, not a controller-specific ordering.
 class DeckGamepadNavigation {
 public:

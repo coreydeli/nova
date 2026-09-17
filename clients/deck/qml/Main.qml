@@ -17,7 +17,7 @@ ApplicationWindow {
     readonly property int deckPanelSpacing: 12
     readonly property int deckRowSpacing: 16
     readonly property int hostColumnWidth: 336
-    readonly property int sampleCardWidth: 392
+    readonly property int sampleCardWidth: 760
     readonly property int detailColumnWidth: 424
     readonly property int hostCardHeight: 112
     readonly property int detailPanelHeight: 184
@@ -199,6 +199,10 @@ ApplicationWindow {
     }
 
     function focusSelectedHost() {
+        if (!hostPicker.opened) {
+            hostPicker.open()
+            return
+        }
         for (let i = 0; i < hostRepeater.count; ++i) {
             const item = hostRepeater.itemAt(i)
             if (item && selectedHostForPreview && item.objectName === selectedHostForPreview.id) {
@@ -212,6 +216,7 @@ ApplicationWindow {
     }
 
     function focusSelectedGame() {
+        if (hostPicker.opened) hostPicker.close()
         for (let i = 0; i < libraryGameRepeater.count; ++i) {
             const item = libraryGameRepeater.itemAt(i)
             if (item && selectedGameForPreview && item.objectName === selectedGameForPreview.id) {
@@ -538,7 +543,29 @@ ApplicationWindow {
         }
         function onSecondaryActionPressed(activationCount) {
             cancelHandoffFromController()
+            if (hostPicker.opened) hostPicker.close()
+            focusSelectedGame()
         }
+    }
+
+    Popup {
+        id: hostPicker
+        objectName: "host-picker"
+        anchors.centerIn: Overlay.overlay
+        width: hostColumnWidth + 32
+        height: Math.min(root.height - 120, Math.max(260, novaLibraryHosts.length * (hostCardHeight + 12) + 80))
+        padding: 16
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: focusSelectedHost()
+        onClosed: Qt.callLater(focusSelectedGame)
+        background: Rectangle {
+            color: "#10182E"
+            border.color: "#53678C"
+            radius: 20
+        }
+        contentItem: Item { id: hostPickerContent }
     }
 
     MouseArea {
@@ -555,11 +582,7 @@ ApplicationWindow {
         focus: true
         Component.onCompleted: Qt.callLater(function() {
             refreshLaunchPreviewBinding()
-            if (novaLibraryHosts.length > 0 && hostRepeater.itemAt(0) !== null) {
-                hostRepeater.itemAt(0).forceActiveFocus()
-            } else {
-                emptyHostState.forceActiveFocus()
-            }
+            focusSelectedGame()
         })
 
         ColumnLayout {
@@ -567,11 +590,40 @@ ApplicationWindow {
             anchors.margins: deckSafeMargin
             spacing: deckShellSpacing
 
-            Label {
-                text: novaDeckShellName
-                color: "#E9ECFF"
-                font.pixelSize: 32
-                font.bold: true
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: novaDeckShellName
+                    color: "#E9ECFF"
+                    font.pixelSize: 32
+                    font.bold: true
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    id: hostPickerButton
+                    objectName: "change-host"
+                    text: "Host: " + (selectedHostForPreview.displayName || "Choose host") + "  ▾"
+                    Layout.preferredWidth: 424
+                    Layout.preferredHeight: 52
+                    onClicked: focusSelectedHost()
+                    Keys.onReturnPressed: focusSelectedHost()
+                    Keys.onEnterPressed: focusSelectedHost()
+                    Keys.onDownPressed: focusSelectedGame()
+                    contentItem: Text {
+                        text: hostPickerButton.text
+                        font.pixelSize: 17
+                        font.bold: true
+                        color: hostPickerButton.activeFocus ? "#10182E" : "#D0DAF0"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                    background: Rectangle {
+                        color: hostPickerButton.activeFocus ? focusRingColor : "#1B2742"
+                        border.color: hostPickerButton.activeFocus ? focusRingColor : "#344361"
+                        radius: 12
+                    }
+                }
             }
 
             Label {
@@ -590,6 +642,7 @@ ApplicationWindow {
 
             Rectangle {
                 objectName: "deck-player-flow-stepper"
+                visible: false
                 Layout.fillWidth: true
                 Layout.preferredHeight: 44
                 radius: 18
@@ -646,6 +699,8 @@ ApplicationWindow {
                 ScrollableColumn {
                     id: hostViewport
                     objectName: "host-viewport"
+                    parent: hostPickerContent
+                    anchors.fill: parent
                     Layout.preferredWidth: hostColumnWidth
                     spacing: deckPanelSpacing
 
@@ -712,7 +767,7 @@ ApplicationWindow {
                             Layout.preferredWidth: hostColumnWidth
                             Layout.preferredHeight: hostCardHeight
                             radius: 20
-                            color: activeFocus ? focusGlowColor : "#151D39"
+                            color: activeFocus ? focusRingColor : "#151D39"
                             border.color: activeFocus ? focusRingColor : "#344361"
                             border.width: activeFocus ? 5 : 1
                             focus: modelData.initialFocus
@@ -720,15 +775,18 @@ ApplicationWindow {
                             KeyNavigation.right: hostDetailPanel
                             onActiveFocusChanged: if (activeFocus) selectHostForPreview(modelData)
                             TapHandler {
-                                onTapped: parent.forceActiveFocus()
+                                onTapped: {
+                                    selectHostForPreview(modelData)
+                                    focusSelectedGame()
+                                }
                             }
                             Keys.onRightPressed: {
                                 selectHostForPreview(modelData)
                                 focusSelectedGame()
                             }
-                            Keys.onReturnPressed: selectHostForPreview(modelData)
-                            Keys.onEnterPressed: selectHostForPreview(modelData)
-                            Keys.onSpacePressed: selectHostForPreview(modelData)
+                            Keys.onReturnPressed: { selectHostForPreview(modelData); focusSelectedGame() }
+                            Keys.onEnterPressed: { selectHostForPreview(modelData); focusSelectedGame() }
+                            Keys.onSpacePressed: { selectHostForPreview(modelData); focusSelectedGame() }
                             Keys.onDownPressed: {
                                 const next = hostRepeater.itemAt((index + 1) % hostRepeater.count)
                                 if (next !== null) {
@@ -751,7 +809,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: modelData.displayName
                                     elide: Text.ElideRight
-                                    color: "#E9ECFF"
+                                    color: parent.parent.activeFocus ? "#10182E" : "#E9ECFF"
                                     font.pixelSize: 20
                                     font.bold: true
                                 }
@@ -760,14 +818,14 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: modelData.statusLabel
                                     elide: Text.ElideRight
-                                    color: "#B8C2F0"
+                                    color: parent.parent.activeFocus ? "#354660" : "#B8C2F0"
                                     font.pixelSize: 16
                                 }
 
                                 Label {
                                     visible: selectedHostForPreview.id === modelData.id
-                                    text: parent.parent.activeFocus ? "FOCUSED · Right to pick a game" : "Selected host"
-                                    color: parent.parent.activeFocus ? "#FFFFFF" : "#8999B5"
+                                    text: parent.parent.activeFocus ? "A · Use this host" : "Selected host"
+                                    color: parent.parent.activeFocus ? "#354660" : "#8999B5"
                                     font.pixelSize: 14
                                     font.bold: true
                                 }
@@ -783,7 +841,7 @@ ApplicationWindow {
                     spacing: deckPanelSpacing
 
                     Label {
-                        text: "2 · Pick game"
+                        text: "Your games"
                         color: "#E9ECFF"
                         font.pixelSize: 23
                         font.bold: true
@@ -812,7 +870,7 @@ ApplicationWindow {
                         activeFocusOnTab: visible
                         KeyNavigation.left: novaLibraryHosts.length > 0 ? hostRepeater.itemAt(0) : emptyHostState
                         KeyNavigation.right: hostDetailPanel
-                        Keys.onLeftPressed: focusSelectedHost()
+                        Keys.onLeftPressed: hostPickerButton.forceActiveFocus()
                         Keys.onRightPressed: focusLaunchAction()
 
                         ColumnLayout {
@@ -847,9 +905,9 @@ ApplicationWindow {
 
                             objectName: modelData.id
                             Layout.preferredWidth: sampleCardWidth
-                            Layout.preferredHeight: 128
+                            Layout.preferredHeight: 104
                             radius: 18
-                            color: activeFocus ? focusGlowColor : "#151D39"
+                            color: activeFocus ? focusRingColor : "#151D39"
                             border.color: activeFocus ? focusRingColor : "#344361"
                             border.width: activeFocus ? 5 : 1
                             focus: modelData.initialFocus
@@ -863,22 +921,26 @@ ApplicationWindow {
                                 selectGameForPreview(modelData)
                                 focusLaunchAction()
                             }
-                            Keys.onReturnPressed: selectGameForPreview(modelData)
-                            Keys.onEnterPressed: selectGameForPreview(modelData)
-                            Keys.onSpacePressed: selectGameForPreview(modelData)
+                            Keys.onReturnPressed: { selectGameForPreview(modelData); focusLaunchAction() }
+                            Keys.onEnterPressed: { selectGameForPreview(modelData); focusLaunchAction() }
+                            Keys.onSpacePressed: { selectGameForPreview(modelData); focusLaunchAction() }
                             Keys.onDownPressed: {
-                                const next = libraryGameRepeater.itemAt((index + 1) % libraryGameRepeater.count)
+                                const next = libraryGameRepeater.itemAt(Math.min(index + 1, libraryGameRepeater.count - 1))
                                 if (next !== null) {
                                     next.forceActiveFocus()
                                 }
                             }
                             Keys.onUpPressed: {
-                                const previous = libraryGameRepeater.itemAt((index + libraryGameRepeater.count - 1) % libraryGameRepeater.count)
+                                if (index === 0) {
+                                    hostPickerButton.forceActiveFocus()
+                                    return
+                                }
+                                const previous = libraryGameRepeater.itemAt(index - 1)
                                 if (previous !== null) {
                                     previous.forceActiveFocus()
                                 }
                             }
-                            Keys.onLeftPressed: focusSelectedHost()
+                            Keys.onLeftPressed: hostPickerButton.forceActiveFocus()
 
                             ColumnLayout {
                                 anchors.fill: parent
@@ -894,7 +956,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: modelData.title
                                     elide: Text.ElideRight
-                                    color: "#E9ECFF"
+                                    color: parent.parent.activeFocus ? "#10182E" : "#E9ECFF"
                                     font.pixelSize: 26
                                     font.bold: true
                                 }
@@ -903,7 +965,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: modelData.installedLabel
                                     elide: Text.ElideRight
-                                    color: "#B8C2F0"
+                                    color: parent.parent.activeFocus ? "#354660" : "#B8C2F0"
                                     font.pixelSize: 13
                                 }
 
@@ -912,14 +974,14 @@ ApplicationWindow {
                                     text: modelData.launchModeLabel
                                     visible: diagnosticsExpanded
                                     elide: Text.ElideRight
-                                    color: "#A8B0D8"
+                                    color: parent.parent.activeFocus ? "#354660" : "#A8B0D8"
                                     font.pixelSize: 14
                                 }
 
                                 Label {
                                     visible: selectedGameForPreview.id === modelData.id
-                                    text: parent.parent.activeFocus ? "FOCUSED · Right to review" : "Selected game"
-                                    color: parent.parent.activeFocus ? "#FFFFFF" : "#8999B5"
+                                    text: parent.parent.activeFocus ? "A · Review and play" : "Selected game"
+                                    color: parent.parent.activeFocus ? "#354660" : "#8999B5"
                                     font.pixelSize: 13
                                     font.bold: true
                                 }
@@ -943,8 +1005,8 @@ ApplicationWindow {
                         color: activeFocus ? focusGlowColor : "#151D39"
                         border.color: activeFocus ? focusRingColor : "#39466F"
                         border.width: activeFocus ? 5 : 2
-                        focus: true
-                        activeFocusOnTab: true
+                        focus: false
+                        activeFocusOnTab: false
                         KeyNavigation.left: hostRepeater.itemAt(0) !== null ? hostRepeater.itemAt(0) : emptyHostState
                         KeyNavigation.up: copyPreviewButton
                         KeyNavigation.down: launchCtaPlaceholder
@@ -959,7 +1021,7 @@ ApplicationWindow {
                             spacing: 8
 
                             Label {
-                                text: "3 · Review"
+                                text: "Selected game"
                                 color: "#7C88B8"
                                 font.pixelSize: 16
                             }
@@ -1026,7 +1088,7 @@ ApplicationWindow {
                         border.width: activeFocus ? 5 : 2
                         opacity: 1.0
                         focus: false
-                        activeFocusOnTab: true
+                        activeFocusOnTab: false
                         KeyNavigation.up: hostDetailPanel
                         KeyNavigation.down: secondaryDiagnosticsToggle
                         Keys.onUpPressed: hostDetailPanel.forceActiveFocus()
@@ -1104,7 +1166,7 @@ ApplicationWindow {
                                     : handoffState.armed ? "Confirm launch in Moonlight" : "Play in Moonlight"
                                 contentItem: Text {
                                     text: handoffActionButton.text
-                                    color: "#FFFFFF"
+                                    color: handoffActionButton.activeFocus ? "#10182E" : "#FFFFFF"
                                     font.pixelSize: 18
                                     font.bold: true
                                     horizontalAlignment: Text.AlignHCenter
@@ -1112,7 +1174,7 @@ ApplicationWindow {
                                 }
                                 background: Rectangle {
                                     radius: 12
-                                    color: handoffActionButton.activeFocus ? focusGlowColor : "#263B62"
+                                    color: handoffActionButton.activeFocus ? focusRingColor : "#263B62"
                                     border.color: handoffActionButton.activeFocus ? focusRingColor : "#53678C"
                                     border.width: handoffActionButton.activeFocus ? 5 : 1
                                 }
@@ -1121,7 +1183,7 @@ ApplicationWindow {
                                 Keys.onReturnPressed: (event) => { if (!event.isAutoRepeat) activateLaunchCardFromController() }
                                 Keys.onEnterPressed: (event) => { if (!event.isAutoRepeat) activateLaunchCardFromController() }
                                 Keys.onLeftPressed: focusSelectedLibraryItem()
-                                Keys.onUpPressed: hostDetailPanel.forceActiveFocus()
+                                Keys.onUpPressed: focusSelectedGame()
                                 Keys.onDownPressed: copyPreviewButton.forceActiveFocus()
                             }
 
@@ -1329,7 +1391,7 @@ ApplicationWindow {
                                 onClicked: activateLaunchPreviewCopyFromController()
                                 contentItem: Text {
                                     text: copyPreviewButton.text
-                                    color: "#E9ECFF"
+                                    color: copyPreviewButton.activeFocus ? "#10182E" : "#E9ECFF"
                                     font.pixelSize: 13
                                     font.bold: true
                                     horizontalAlignment: Text.AlignHCenter
@@ -1338,7 +1400,7 @@ ApplicationWindow {
                                 }
                                 background: Rectangle {
                                     radius: 12
-                                    color: copyPreviewButton.activeFocus ? focusGlowColor : "#1B2742"
+                                    color: copyPreviewButton.activeFocus ? focusRingColor : "#1B2742"
                                     border.color: copyPreviewButton.activeFocus ? focusRingColor : "#344361"
                                     border.width: copyPreviewButton.activeFocus ? 5 : 1
                                 }
@@ -1348,14 +1410,14 @@ ApplicationWindow {
                                 id: secondaryDiagnosticsToggle
                                 contentItem: Text {
                                     text: secondaryDiagnosticsToggle.text
-                                    color: "#E9ECFF"
+                                    color: secondaryDiagnosticsToggle.activeFocus ? "#10182E" : "#E9ECFF"
                                     font.pixelSize: 14
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
                                 background: Rectangle {
                                     radius: 12
-                                    color: secondaryDiagnosticsToggle.activeFocus ? focusGlowColor : "#1B2742"
+                                    color: secondaryDiagnosticsToggle.activeFocus ? focusRingColor : "#1B2742"
                                     border.color: secondaryDiagnosticsToggle.activeFocus ? focusRingColor : "#344361"
                                     border.width: secondaryDiagnosticsToggle.activeFocus ? 5 : 1
                                 }
@@ -1793,7 +1855,7 @@ ApplicationWindow {
 
             Label {
                 text: novaDeckFullscreenPreferred
-                    ? "D-pad Navigate · A Confirm · Touch to select"
+                    ? "D-pad Navigate · A Review / Select · B Back · Touch to select"
                     : "Deck default: 1280×800 · windowed test mode"
                 color: "#7C88B8"
                 font.pixelSize: 18

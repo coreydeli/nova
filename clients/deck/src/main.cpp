@@ -60,6 +60,12 @@ public:
         : QObject(parent) {
         QObject::connect(&reconnectTimer_, &QTimer::timeout, this, [this]() {
             if (!available()) openDefaultDevice();
+            if (traceInput_ && tracePolls_++ < 5) {
+                auto* window = QGuiApplication::focusWindow();
+                qInfo() << "Nova Deck input" << "focus-window" << (window != nullptr)
+                        << "active" << (window && window->isActive())
+                        << "device-open" << available();
+            }
         });
         reconnectTimer_.start(1000);
         openDefaultDevice();
@@ -95,10 +101,13 @@ private:
     void sendNavigationKey(int key) {
         QWindow* window = QGuiApplication::focusWindow();
         if (!window || !window->isActive()) return;
+        const auto* previousFocus = window->focusObject();
         QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &press);
         QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &release);
+        if (traceInput_) qInfo() << "Nova Deck input" << "navigation-delivered" << key
+                                << "focus-moved" << (previousFocus != window->focusObject());
     }
 
     void openDefaultDevice() {
@@ -110,18 +119,9 @@ private:
             return;
         }
 
-        unsigned char axes[ABS_CNT]{};
-        int horizontalAxis = -1;
-        int verticalAxis = -1;
-        unsigned char axisCount = 0;
-        if (::ioctl(gamepadFd_, JSIOCGAXES, &axisCount) == 0 &&
-            ::ioctl(gamepadFd_, JSIOCGAXMAP, axes) == 0) {
-            for (int i = 0; i < axisCount && i < ABS_CNT; ++i) {
-                if (axes[i] == ABS_HAT0X) horizontalAxis = i;
-                if (axes[i] == ABS_HAT0Y) verticalAxis = i;
-            }
-        }
-        navigation_ = nova::deck::DeckGamepadNavigation(horizontalAxis, verticalAxis);
+        const auto axes = nova::deck::readDeckGamepadHatAxes(gamepadFd_);
+        navigation_ = nova::deck::DeckGamepadNavigation(axes.horizontal, axes.vertical);
+        if (traceInput_) qInfo() << "Nova Deck input" << "hat-map" << axes.horizontal << axes.vertical;
         notifier_ = new QSocketNotifier(gamepadFd_, QSocketNotifier::Read, this);
         QObject::connect(notifier_, &QSocketNotifier::activated, this, [this]() {
             readPendingJoystickEvents();
@@ -145,6 +145,11 @@ private:
                 const auto direction = navigation_.decode(event);
                 // Keep draining while unfocused without acting on background input.
                 auto* window = QGuiApplication::focusWindow();
+                if (traceInput_ && direction != nova::deck::DeckGamepadAction::None) {
+                    qInfo() << "Nova Deck input" << "direction" << static_cast<int>(direction)
+                            << "focus-window" << (window != nullptr)
+                            << "active" << (window && window->isActive());
+                }
                 if (!window || !window->isActive()) continue;
                 using Action = nova::deck::DeckGamepadAction;
                 switch (direction) {
@@ -185,6 +190,8 @@ private:
     void readPendingJoystickEvents() {}
 #endif
     QTimer reconnectTimer_;
+    bool traceInput_ = qEnvironmentVariableIsSet("NOVA_DECK_INPUT_TRACE");
+    int tracePolls_ = 0;
     nova::deck::DeckGamepadNavigation navigation_;
     int primaryActivationCount_ = 0;
     int secondaryActivationCount_ = 0;
