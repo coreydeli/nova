@@ -59,7 +59,8 @@ class NvHTTP @Throws(IOException::class) constructor(
     private var serverCert: X509Certificate?,
     cryptoProvider: LimelightCryptoProvider,
 ) {
-    private val deviceName: String = DeviceUtils.getModel()
+    // A host names a device from this at pairing; see DeviceUtils.getPairingName.
+    private val deviceName: String = DeviceUtils.getPairingName()
     private val pm: PairingManager
     private val baseUrlHttp: HttpUrl
 
