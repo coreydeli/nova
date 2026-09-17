@@ -1,6 +1,11 @@
 # Nova Deck Client
 
-This directory is the first native Steam Deck client slice for Nova. It is intentionally a scaffold, not the streamer port.
+This directory contains Nova's native Steam Deck development client. It has a
+Qt shell, live library reads, a Moonlight handoff, and a headless native
+GameStream connection with hardware decoding. It is not yet a supported Deck
+release. The active [release parity checklist](../../docs/deck-release-parity.md)
+requires standalone pairing, in-app media and controls, Android product parity,
+and OLED HDR10 at 90 fps together.
 
 Current status:
 
@@ -95,6 +100,12 @@ Native C++ cannot include Kotlin source directly. For this first slice, fixtures
 Keep this boundary explicit until the shared contract is exported through a real native-consumable API. Do not fake Kotlin/C++ interop by including .kt files.
 
 ## Stream core skeleton boundary
+
+The original no-network skeleton now also has an explicitly gated real connection
+path through `DeckStreamSession::startNetwork`. `--native-launch "<title>"`
+exercises launch, hardware decoding, teardown and host cancellation headlessly.
+It does not prove visible presentation, audible playback or working game input.
+The historical no-network route below remains available for offline tests.
 
 clients/deck/src/stream/deck_stream_core.h is the first no-network native stream-core seam for the direct moonlight-common-c path. The CMake target links the real app/src/main/jni/moonlight-core/moonlight-common-c tree and the focused CTest includes Limelight.h, initializes STREAM_CONFIGURATION plus listener/video/audio callback structs, and verifies that the Deck lifecycle can move through idle, preparing, starting, active, stopping, stopped, cancelled, and failed states without opening sockets or calling LiStartConnection.
 

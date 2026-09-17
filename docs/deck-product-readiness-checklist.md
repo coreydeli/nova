@@ -1,5 +1,10 @@
 # Deck product-readiness checklist
 
+This is the historical diagnostics-preview gate. The active supported-client
+release scope and Android parity inventory live in
+[Deck release parity](deck-release-parity.md). Passing this preview gate does
+not establish native video presentation, audio, input, standalone pairing or HDR.
+
 This checklist promotes the Deck diagnostics lane into a reusable product-readiness gate instead of another round of smoke-only cosmetics. Use it for every future diagnostics/read-only DTO card before claiming the shell is product-ready.
 
 ## Gate: deck-diagnostics-expanded-lane-v1
@@ -40,4 +45,8 @@ This gate must not add host scanning, pairing flows, secret storage access, app 
 
 ## Next-card direction
 
-The next single-card recommendation is review-and-accept M28 evidence after this backend-fed read-only DTO parity slice, then consider a separate explicitly approved backend-fed data source spike that still does not start real streaming. Stop polishing diagnostics cosmetics unless a criterion above becomes unobservable or fails.
+The read-only live data source and headless native connection have since landed
+through PRs #287, #294 and #298. Follow the active release parity checklist for
+GUI media, audio, input, standalone setup and installed-artifact acceptance.
+Keep this offline gate for preview regressions; stop treating diagnostics polish
+as progress toward capabilities it cannot exercise.
