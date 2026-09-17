@@ -1,4 +1,5 @@
 #include "stream/deck_stream_media_adapters.h"
+#include "deck_audio_test_support.h"
 
 #include <Limelight.h>
 
@@ -1541,27 +1542,30 @@ int main(int argc, char** argv) {
     NOVA_TEST_REQUIRE(audioProbe.pipeWireHeadersLinked);
     NOVA_TEST_REQUIRE(audioProbe.pulseFallbackHeadersLinked);
 
-    OPUS_MULTISTREAM_CONFIGURATION opusConfig{};
-    opusConfig.samplesPerFrame = 240;
-    DeckPipeWireAudio audio;
-    NOVA_TEST_REQUIRE(audio.adapterName() == "pipewire-pcm-pulse-fallback-prototype");
+    auto opusConfig = nova::deck::test::stereoConfig();
+    nova::deck::test::RecordingPcmOutput audioOutput;
+    DeckPipeWireAudio audio(audioOutput);
+    NOVA_TEST_REQUIRE(audio.adapterName() == "opus-pipewire-float-pcm");
     NOVA_TEST_REQUIRE(audio.init(AUDIO_CONFIGURATION_STEREO, &opusConfig, nullptr, 0) == 0);
     audio.start();
-    char pcm[] = {'p', 'c', 'm', '!'};
-    audio.decodeAndPlaySample(pcm, 4);
+    auto packet = nova::deck::test::encodePacket(opusConfig, 240);
+    audio.decodeAndPlaySample(packet.data(), packet.size());
     audio.stop();
     audio.cleanup();
     NOVA_TEST_REQUIRE(audio.lifecycle().initCalls == 1);
     NOVA_TEST_REQUIRE(audio.lifecycle().startCalls == 1);
     NOVA_TEST_REQUIRE(audio.lifecycle().sampleCalls == 1);
-    NOVA_TEST_REQUIRE(audio.lifecycle().lastSampleLength == 4);
+    NOVA_TEST_REQUIRE(audio.lifecycle().lastSampleLength == static_cast<int>(packet.size()));
+    NOVA_TEST_REQUIRE(audio.lifecycle().decodedFrames == 240);
+    NOVA_TEST_REQUIRE(audio.lifecycle().queuedFrames == 240);
     NOVA_TEST_REQUIRE(audio.lifecycle().samplesPerFrame == 240);
     NOVA_TEST_REQUIRE(audio.lifecycle().stopCalls == 1);
     NOVA_TEST_REQUIRE(audio.lifecycle().cleanupCalls == 1);
     NOVA_TEST_REQUIRE(audio.lifecycle().networkStartAllowed == false);
 
     DeckVaapiFfmpegRenderer callbackRenderer;
-    DeckPipeWireAudio callbackAudio;
+    nova::deck::test::RecordingPcmOutput callbackOutput;
+    DeckPipeWireAudio callbackAudio(callbackOutput);
     NoopInput input;
     RecordingEvents events;
     DeckStreamSession session(callbackRenderer, callbackAudio, input, events);
@@ -1579,8 +1583,7 @@ int main(int argc, char** argv) {
     const int callbackRendererSetup = session.moonlightBoundary().videoCallbacks->setup(VIDEO_FORMAT_H264, 1280, 800, 60, session.moonlightBoundary().callbackContext, 0);
     NOVA_TEST_REQUIRE(callbackRendererSetup == (callbackRenderer.lifecycle().runtimeVaapiDeviceAvailable ? DR_OK : DR_NEED_IDR));
     NOVA_TEST_REQUIRE(session.moonlightBoundary().videoCallbacks->submitDecodeUnit(nullptr) == DR_NEED_IDR);
-    OPUS_MULTISTREAM_CONFIGURATION callbackOpusConfig{};
-    callbackOpusConfig.samplesPerFrame = 240;
+    auto callbackOpusConfig = nova::deck::test::stereoConfig();
     NOVA_TEST_REQUIRE(session.moonlightBoundary().audioCallbacks->init(AUDIO_CONFIGURATION_STEREO, &callbackOpusConfig, session.moonlightBoundary().callbackContext, 0) == 0);
     NOVA_TEST_REQUIRE(callbackRenderer.lifecycle().setupCalls == 1);
     NOVA_TEST_REQUIRE(callbackRenderer.lifecycle().submitCalls == 1);

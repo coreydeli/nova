@@ -1385,7 +1385,10 @@ int nativeLaunchCommand(
                 std::cout << "nova-deck native: t=" << deadline.elapsed() << "ms"
                           << " decodedHardwareFrames=" << renderer.decodedHardwareFrames
                           << " submitCalls=" << renderer.submitCalls
-                          << " audioSampleCalls=" << audio.sampleCalls << std::endl;
+                          << " audioSampleCalls=" << audio.sampleCalls
+                          << " audioDecodedFrames=" << audio.decodedFrames
+                          << " audioSubmittedFrames=" << audio.submittedFrames
+                          << " audioOutputReady=" << (audio.outputReady ? "true" : "false") << std::endl;
                 nextProgressMs += 2000;
             }
         }
@@ -1420,7 +1423,14 @@ int nativeLaunchCommand(
     std::cout << "nova-deck native audio: initCalls=" << audio.initCalls
               << " sampleCalls=" << audio.sampleCalls
               << " lastSampleLength=" << audio.lastSampleLength
-              << " audioConfiguration=" << audio.audioConfiguration << std::endl;
+              << " audioConfiguration=" << audio.audioConfiguration
+              << " decodedFrames=" << audio.decodedFrames
+              << " queuedFrames=" << audio.queuedFrames
+              << " submittedFrames=" << audio.submittedFrames
+              << " silenceFrames=" << audio.silenceFrames
+              << " droppedFrames=" << audio.droppedFrames
+              << " decodeErrors=" << audio.decodeErrors
+              << " lastError=\"" << audio.lastError << "\"" << std::endl;
     std::cout << "nova-deck native moonlight: connectionStarted=" << (moonlight.connectionStarted ? "true" : "false")
               << " terminated=" << (moonlight.terminated ? "true" : "false")
               << " terminationErrorCode=" << moonlight.terminationErrorCode
