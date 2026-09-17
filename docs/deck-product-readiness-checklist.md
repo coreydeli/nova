@@ -22,7 +22,7 @@ Pass criteria:
 - page-2 cue contrast/readability: the page-2 cue stays readable at the recorded 13.56:1 contrast and does not overlap blocker copy.
 - lifecycle idle/no stream: lifecycle detail remains idle/no stream while the smoke route is offline.
 - sanitized DTO detail: diagnostics expose redacted-public-dto only.
-- backend-fed DTO parity: collapsed summary, expanded diagnostics, and smoke artifacts expose the same backend-owned read-only DTO contract (`backend-owned-read-only-dto-v1`) with `dto-parity-ready` readiness, never raw backend fields.
+- backend-fed read-only DTO parity: collapsed summary, expanded diagnostics, and smoke artifacts expose the same backend-owned read-only DTO contract (`backend-owned-read-only-dto-v1`) with `dto-parity-ready` readiness, never raw backend fields.
 - DTO-owned player state: title, body, action, safety, provenance, and focus-order copy come from the sanitized read-only DTO (`dto-player-state/backend-owned/redacted-public`) instead of QML fixture/debug branches.
 - sanitized artifacts: frontend smoke artifacts contain no private addresses, PEM blocks, or raw* shaped fields.
 - backendPowerStarted=false: all read-only matrix states must preserve backendPowerStarted=false.
