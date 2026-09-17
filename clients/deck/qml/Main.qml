@@ -193,6 +193,11 @@ ApplicationWindow {
         refreshLaunchPreviewBinding()
     }
 
+    function focusLaunchAction() {
+        if (handoffActionButton.visible) handoffActionButton.forceActiveFocus()
+        else secondaryDiagnosticsToggle.forceActiveFocus()
+    }
+
     function focusSelectedHost() {
         for (let i = 0; i < hostRepeater.count; ++i) {
             const item = hostRepeater.itemAt(i)
@@ -808,7 +813,7 @@ ApplicationWindow {
                         KeyNavigation.left: novaLibraryHosts.length > 0 ? hostRepeater.itemAt(0) : emptyHostState
                         KeyNavigation.right: hostDetailPanel
                         Keys.onLeftPressed: focusSelectedHost()
-                        Keys.onRightPressed: hostDetailPanel.forceActiveFocus()
+                        Keys.onRightPressed: focusLaunchAction()
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -856,7 +861,7 @@ ApplicationWindow {
                             }
                             Keys.onRightPressed: {
                                 selectGameForPreview(modelData)
-                                hostDetailPanel.forceActiveFocus()
+                                focusLaunchAction()
                             }
                             Keys.onReturnPressed: selectGameForPreview(modelData)
                             Keys.onEnterPressed: selectGameForPreview(modelData)
@@ -933,7 +938,7 @@ ApplicationWindow {
                         id: hostDetailPanel
                         objectName: "host-detail-panel"
                         Layout.preferredWidth: detailColumnWidth
-                        Layout.preferredHeight: detailPanelHeight
+                        Layout.preferredHeight: Math.max(detailPanelHeight, hostReviewContent.implicitHeight + 40)
                         radius: 22
                         color: activeFocus ? focusGlowColor : "#151D39"
                         border.color: activeFocus ? focusRingColor : "#39466F"
@@ -945,9 +950,10 @@ ApplicationWindow {
                         KeyNavigation.down: launchCtaPlaceholder
                         Keys.onLeftPressed: focusSelectedLibraryItem()
                         Keys.onUpPressed: copyPreviewButton.forceActiveFocus()
-                        Keys.onDownPressed: launchCtaPlaceholder.forceActiveFocus()
+                        Keys.onDownPressed: focusLaunchAction()
 
                         ColumnLayout {
+                            id: hostReviewContent
                             anchors.fill: parent
                             anchors.margins: 20
                             spacing: 8
@@ -1013,7 +1019,7 @@ ApplicationWindow {
                         id: launchCtaPlaceholder
                         objectName: "safe-launch-plan-cta"
                         Layout.preferredWidth: detailColumnWidth
-                        Layout.preferredHeight: launchPreviewHeight
+                        Layout.preferredHeight: Math.max(launchPreviewHeight, launchContent.implicitHeight + 32)
                         radius: 20
                         color: activeFocus ? focusGlowColor : "#181D34"
                         border.color: activeFocus ? focusRingColor : "#39466F"
@@ -1033,6 +1039,7 @@ ApplicationWindow {
                         Keys.onLeftPressed: focusSelectedLibraryItem()
 
                         ColumnLayout {
+                            id: launchContent
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 3
@@ -1115,7 +1122,7 @@ ApplicationWindow {
                                 Keys.onEnterPressed: (event) => { if (!event.isAutoRepeat) activateLaunchCardFromController() }
                                 Keys.onLeftPressed: focusSelectedLibraryItem()
                                 Keys.onUpPressed: hostDetailPanel.forceActiveFocus()
-                                Keys.onDownPressed: secondaryDiagnosticsToggle.forceActiveFocus()
+                                Keys.onDownPressed: copyPreviewButton.forceActiveFocus()
                             }
 
                             Label {
@@ -1313,7 +1320,7 @@ ApplicationWindow {
                                 activeFocusOnTab: true
                                 KeyNavigation.up: launchCtaPlaceholder
                                 KeyNavigation.down: secondaryDiagnosticsToggle
-                                Keys.onUpPressed: launchCtaPlaceholder.forceActiveFocus()
+                                Keys.onUpPressed: focusLaunchAction()
                                 Keys.onDownPressed: secondaryDiagnosticsToggle.forceActiveFocus()
                                 Keys.onLeftPressed: focusSelectedLibraryItem()
                                 Keys.onReturnPressed: activateLaunchPreviewCopyFromController()
@@ -1367,7 +1374,7 @@ ApplicationWindow {
                                 Keys.onReturnPressed: diagnosticsExpanded = !diagnosticsExpanded
                                 Keys.onEnterPressed: diagnosticsExpanded = !diagnosticsExpanded
                                 Keys.onSpacePressed: diagnosticsExpanded = !diagnosticsExpanded
-                                Keys.onUpPressed: launchCtaPlaceholder.forceActiveFocus()
+                                Keys.onUpPressed: copyPreviewButton.forceActiveFocus()
                                 Keys.onDownPressed: diagnosticsExpanded ? expandedDiagnosticsLane.forceActiveFocus() : copyPreviewButton.forceActiveFocus()
                             }
 
