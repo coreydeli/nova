@@ -90,6 +90,12 @@ security and standard-host/Spaces compatibility matrix.
 
 ## Release disposition
 
+Implementation progress after the frozen reference: [draft audio PR #320](https://github.com/papi-ux/nova/pull/320)
+adds real Opus decoding and bounded PipeWire output toward P10/P15. Real-packet
+tests, private null-sink playback/disconnect tests and a KDE Flatpak build pass.
+Review, GUI integration and installed-Deck audio acceptance remain open. The
+reference-status column above remains a record of the audited baseline.
+
 Deck publication remains held while any required row is incomplete. The existing
 headless native proof and offline diagnostics gate remain valuable bounded
 evidence, not a supported Deck release. Static HDR10 belongs to this target;
