@@ -67,15 +67,10 @@ internal fun NovaLibraryCinematicBackdrop(
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
     val backdropTarget = game?.let { game ->
-        // Big Picture's bundled Steam mark is not artwork; stretched full-bleed it was a grey
-        // smear behind the stage. The ambient field stands in for it.
-        if (game.space?.target == "big-picture-v1") return@let null
-        // A hero is asked for only when the host lists one for this game: cached for a
-        // desktop title, listed at all for a Space title (its route resolves on the host).
-        // Every Space game used to ask for one and take the miss.
-        val hasCachedHero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO)?.cached == true ||
-            (game.space != null && game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO) != null)
-        val artworkKind = if (hasCachedHero) PolarisGame.ARTWORK_KIND_HERO else PolarisGame.ARTWORK_KIND_POSTER
+        // One rule for every entry, owned by the mapper: a real hero, or the ambient field.
+        // A poster stretched full-bleed was a slice of its wordmark behind the whole screen,
+        // and Big Picture's bundled Steam mark was a grey smear; neither is drawn now.
+        val artworkKind = NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game) ?: return@let null
         NovaLibraryCinematicBackdropTarget(
             game = game,
             artworkKind = artworkKind,
@@ -120,11 +115,7 @@ internal fun NovaLibraryCinematicBackdrop(
                             if (view.getTag(R.id.nova_artwork_presentation_key) != target.presentationKey) {
                                 view.setTag(R.id.nova_artwork_presentation_key, target.presentationKey)
                                 view.setImageDrawable(null)
-                                if (target.artworkKind == PolarisGame.ARTWORK_KIND_HERO) {
-                                    apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)
-                                } else {
-                                    apiClient.loadCoverInto(view, target.game)
-                                }
+                                apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)
                             }
                         },
                         modifier = Modifier

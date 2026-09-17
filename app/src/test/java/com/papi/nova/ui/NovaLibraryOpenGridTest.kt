@@ -1,6 +1,8 @@
 package com.papi.nova.ui
 
+import com.papi.nova.shared.polaris.model.PolarisGame
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,6 +102,34 @@ class NovaLibraryOpenGridTest {
         assertEquals(19f, NovaLibraryUiStateMapper.gridFocusScrollDistance(200f, 123f, 304f, margin), 0.001f)
         // With only 4px to spare, the margin shrinks to what room there is.
         assertEquals(-9f, NovaLibraryUiStateMapper.gridFocusScrollDistance(-5f, 300f, 304f, margin), 0.001f)
+    }
+
+    @Test
+    fun theBackdropDrawsOnlyARealHero() {
+        val cachedHero = PolarisGame.ArtworkAsset(url = "/hero", cached = true)
+        val listedHero = PolarisGame.ArtworkAsset(url = "/hero", cached = false)
+        val poster = PolarisGame.ArtworkAsset(url = "/poster", cached = true)
+        fun game(
+            hero: PolarisGame.ArtworkAsset?,
+            space: PolarisGame.SpaceContext? = null,
+        ) = PolarisGame(
+            id = "g",
+            space = space,
+            artwork = PolarisGame.ArtworkManifest(
+                revision = "r",
+                assets = PolarisGame.ArtworkAssets(poster = poster, hero = hero),
+            ),
+        )
+        val space = PolarisGame.SpaceContext("p", "papi - steam", "813230")
+        val bigPicture = PolarisGame.SpaceContext("p", "papi - steam", "big-picture-v1")
+
+        assertEquals(PolarisGame.ARTWORK_KIND_HERO, NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game(cachedHero)))
+        assertNull("a desktop hero not cached yet is not drawn", NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game(listedHero)))
+        assertNull("a poster alone never fills the screen", NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game(null)))
+        assertEquals(PolarisGame.ARTWORK_KIND_HERO, NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game(listedHero, space)))
+        assertNull(NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game(null, space)))
+        assertNull("Big Picture's bundled mark is no hero", NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game(cachedHero, bigPicture)))
+        assertNull(NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(null))
     }
 
     private fun rp6Spec(mode: NovaLibraryLayoutMode) = NovaLibraryUiStateMapper.gridViewportSpec(

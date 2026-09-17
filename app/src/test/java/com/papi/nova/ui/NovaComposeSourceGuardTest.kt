@@ -485,14 +485,13 @@ class NovaComposeSourceGuardTest {
         val posterCard = readSource("src/main/java/com/papi/nova/ui/NovaLibraryPosterCard.kt")
         val focusedRevisionKey = "key(PolarisApiClient.artworkPresentationKey(targetGame, PolarisGame.ARTWORK_KIND_POSTER))"
         assertTrue(
-            "shared Activity and Stage poster views should be revision-aware",
+            "shared Activity and Stage poster views should be revision-aware, and the backdrop keys its hero the same way (it draws no posters now)",
             posterCard.contains("PolarisApiClient.artworkPresentationKey(") &&
                 posterCard.contains("PolarisGame.ARTWORK_KIND_POSTER") &&
-                chrome.contains("PolarisApiClient.artworkPresentationKey(") &&
-                chrome.contains("PolarisGame.ARTWORK_KIND_POSTER")
+                chrome.contains("PolarisApiClient.artworkPresentationKey(")
         )
         assertTrue(
-            "focused backdrop and home Hero cover should also recreate when the Poster revision changes",
+            "the home Hero cover should recreate when the Poster revision changes, and the backdrop stays fenced by its presentation key",
             source.split(focusedRevisionKey).size - 1 >= 1 &&
                 chrome.contains("R.id.nova_artwork_presentation_key")
         )
@@ -508,14 +507,25 @@ class NovaComposeSourceGuardTest {
     }
 
     @Test
-    fun libraryCinematicBackdropUsesCachedHeroThenPosterFallback() {
+    fun libraryCinematicBackdropDrawsOnlyARealHeroOrTheAmbientField() {
         val backdrop = readSource("src/main/java/com/papi/nova/ui/NovaLibraryCinematicChrome.kt")
+        val mapper = readSource("src/main/java/com/papi/nova/ui/NovaLibraryUiState.kt")
 
-        assertTrue(backdrop.contains("artworkKind = if (hasCachedHero)"))
-        assertTrue(backdrop.contains("PolarisGame.ARTWORK_KIND_HERO"))
-        assertTrue(backdrop.contains("PolarisGame.ARTWORK_KIND_POSTER"))
+        assertTrue(
+            "the backdrop asks the mapper which artwork it may draw, so one rule covers every entry",
+            backdrop.contains("NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game) ?: return@let null")
+        )
+        assertTrue(
+            "only a real hero is drawn: cached for a desktop title, listed for a Space title, never Big Picture's bundled mark",
+            mapper.contains("fun cinematicBackdropArtworkKind(game: PolarisGame?): String?") &&
+                mapper.contains("hero.cached || game.space != null") &&
+                mapper.contains("game.space?.target == \"big-picture-v1\"")
+        )
         assertTrue(backdrop.contains("apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)"))
-        assertTrue(backdrop.contains("apiClient.loadCoverInto(view, target.game)"))
+        assertFalse(
+            "a 2:3 poster stretched across a landscape screen crops to a slice of its wordmark: papi saw a giant VIRTUAL DESKTOP behind the whole library",
+            backdrop.contains("apiClient.loadCoverInto(") || backdrop.contains("PolarisGame.ARTWORK_KIND_POSTER")
+        )
         assertFalse(backdrop.contains("coverUrl.trim().isNotEmpty()"))
     }
 

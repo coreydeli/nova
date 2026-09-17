@@ -1188,6 +1188,19 @@ object NovaLibraryUiStateMapper {
     }
 
     /**
+     * The artwork the cinematic backdrop may draw for a game, or null for the ambient field.
+     * Only a real hero: a cached one for a desktop title, a listed one for a Space title
+     * (its route resolves on the host). A 2:3 poster stretched across a landscape screen
+     * crops to a slice of its wordmark, which is how a giant "VIRTUAL DESKTOP" came to run
+     * behind the whole library, and Big Picture's bundled Steam mark is no hero either.
+     */
+    fun cinematicBackdropArtworkKind(game: PolarisGame?): String? {
+        if (game == null || game.space?.target == "big-picture-v1") return null
+        val hero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO) ?: return null
+        return if (hero.cached || game.space != null) PolarisGame.ARTWORK_KIND_HERO else null
+    }
+
+    /**
      * Space between posters. The old 10dp sat on top of each card's own focus
      * gutter, so neighbouring artwork was 22dp apart against a 112dp poster,
      * about a fifth of the poster itself. The gutter keeps its job of giving the

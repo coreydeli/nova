@@ -328,15 +328,17 @@ class NovaLibraryStageSourceTest {
     }
 
     @Test
-    fun sharedCinematicBackdropUsesRevisionFencedHeroFirstArtworkAndThemeGradients() {
+    fun sharedCinematicBackdropUsesRevisionFencedHeroOnlyArtworkAndThemeGradients() {
         val chrome = read("src/main/java/com/papi/nova/ui/NovaLibraryCinematicChrome.kt")
         val imageUpdate = chrome.substringAfter("update = { view ->").substringBefore("modifier = Modifier")
 
         assertTrue(chrome.contains("internal fun NovaLibraryCinematicBackdrop("))
         assertTrue(chrome.contains("game: PolarisGame?"))
         assertTrue(chrome.contains("modifier: Modifier = Modifier"))
-        assertTrue(chrome.contains("val hasCachedHero = game.artworkAsset(PolarisGame.ARTWORK_KIND_HERO)?.cached == true"))
-        assertTrue(chrome.contains("if (hasCachedHero) PolarisGame.ARTWORK_KIND_HERO else PolarisGame.ARTWORK_KIND_POSTER"))
+        // One rule for every entry, owned by the mapper: a real hero or the ambient field. A
+        // poster stretched full-bleed was a slice of its wordmark behind the whole library.
+        assertTrue(chrome.contains("NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game) ?: return@let null"))
+        assertFalse(chrome.contains("PolarisGame.ARTWORK_KIND_POSTER"))
         assertTrue(chrome.contains("PolarisApiClient.artworkPresentationKey(game, artworkKind)"))
         assertEquals(1, chrome.windowed("Crossfade(".length).count { it == "Crossfade(" })
         assertTrue(chrome.contains("animationSpec = tween(durationMillis = 320)"))
@@ -346,7 +348,7 @@ class NovaLibraryStageSourceTest {
         assertTrue(imageUpdate.contains("view.setTag(R.id.nova_artwork_presentation_key, target.presentationKey)"))
         assertTrue(imageUpdate.indexOf("view.setImageDrawable(null)") < imageUpdate.indexOf("apiClient.loadArtworkInto("))
         assertTrue(imageUpdate.contains("apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)"))
-        assertTrue(imageUpdate.contains("apiClient.loadCoverInto(view, target.game)"))
+        assertFalse(imageUpdate.contains("apiClient.loadCoverInto("))
         assertTrue(chrome.contains("scaleType = ImageView.ScaleType.CENTER_CROP"))
         assertTrue(chrome.contains("importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO"))
         assertTrue(chrome.contains("isFocusable = false"))
