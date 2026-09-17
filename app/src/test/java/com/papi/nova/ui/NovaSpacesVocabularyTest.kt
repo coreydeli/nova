@@ -76,19 +76,25 @@ class NovaSpacesVocabularyTest {
     }
 
     @Test
-    fun landscapeStripShowsTheSpaceRowOnceBesideTheHost() {
-        val stage = File("src/main/java/com/papi/nova/ui/NovaLibraryStage.kt").readText()
-        val strip = stage.substring(
-            stage.indexOf("internal fun NovaLibraryLandscapeShowcaseStripContent("),
-            stage.indexOf("private fun NovaLibraryToolbarIdentity("),
-        )
+    fun landscapeStripShowsTheSpaceRowOnceLeftOfOptions() {
+        val strip = landscapeStrip()
         assertEquals(
             "one Space row in the strip; a rerun of a patch once left two and no host name",
             1,
             Regex("NovaEnvironmentBar\\(").findAll(strip).count(),
         )
         assertFalse("the host identity is not the else branch of the Space row", strip.contains("} else NovaLibraryToolbarIdentity("))
-        assertTrue("host first, then the Space row", strip.indexOf("NovaLibraryToolbarIdentity(") < strip.indexOf("NovaEnvironmentBar("))
+        val identity = strip.indexOf("NovaLibraryToolbarIdentity(")
+        val middle = strip.indexOf("continueSlot(fit)")
+        val meta = strip.indexOf("NovaLibraryResultAndLayoutMeta(")
+        val space = strip.indexOf("NovaEnvironmentBar(")
+        val options = strip.indexOf("NovaLibraryToolbarOptionsAction(")
+        val system = strip.indexOf("NovaLibraryToolbarSystemAction(")
+        assertTrue(
+            "host first and the continue card in the middle; then count, Space, Options and System as one right-hand " +
+                "cluster. Beside the host the Space control read as floating in the middle of the strip (papi, 2026-09-16)",
+            identity in 0 until middle && middle < meta && meta < space && space < options && options < system,
+        )
     }
 
     @Test
@@ -103,13 +109,35 @@ class NovaSpacesVocabularyTest {
             bar.contains("NovaActionButton("),
         )
         assertTrue("its words come from the shared rules, not from the composable", bar.contains("NovaSpacesCopy.environmentLabel("))
+        val strip = landscapeStrip()
+        assertFalse("a fixed 300 dp slot is what pushed the button into the middle", strip.contains("width(300.dp"))
+        assertTrue(
+            "the control sizes to its content, capped, and takes the width the fit cut its name to",
+            strip.contains("widthIn(max = minOf(280f * fontScale, fit.spaceWidth).dp)"),
+        )
+    }
+
+    @Test
+    fun theLandscapeStripNeverScrollsAndMeasuresWhatGivesWay() {
+        val strip = landscapeStrip()
+        assertFalse(
+            "a horizontal scroll with a row forced to 700 or 980 dp times the font scale slid Options and System off an " +
+                "815 dp Retroid strip in every Grid or Compact library with Spaces",
+            strip.contains("horizontalScroll(") || strip.contains("rowWidth") || strip.contains("980.dp") || strip.contains("700.dp"),
+        )
+        assertTrue("what gives way is decided by the tested fit, from measured text", strip.contains("rememberNovaLibraryTopBarFit(") && strip.contains("novaLibraryTopBarFit("))
+        assertTrue(
+            "the host side is the weighted part, so Row measures the right-hand cluster first and the menus never shrink",
+            strip.contains("modifier = Modifier.weight(1f).fillMaxHeight()"),
+        )
+    }
+
+    private fun landscapeStrip(): String {
         val stage = File("src/main/java/com/papi/nova/ui/NovaLibraryStage.kt").readText()
-        val strip = stage.substring(
+        return stage.substring(
             stage.indexOf("internal fun NovaLibraryLandscapeShowcaseStripContent("),
             stage.indexOf("private fun NovaLibraryToolbarIdentity("),
         )
-        assertFalse("a fixed 300 dp slot is what pushed the button into the middle", strip.contains("width(300.dp"))
-        assertTrue("the control sizes to its content and a long name ellipsizes", strip.contains("widthIn(max = 280.dp"))
     }
 
     @Test

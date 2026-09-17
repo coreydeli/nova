@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -50,6 +51,10 @@ import com.papi.nova.ui.compose.NovaRadius
  * What it says comes from the host, never from a fallback (see [NovaSpacesCopy.environmentLabel]):
  * an unavailable host reads "Unavailable on the host", Desktop is named only when the host
  * selected it, and Desktop is never called a Space.
+ *
+ * In the landscape strip the control sits in the right-hand cluster beside Options and System,
+ * and [novaLibraryTopBarFit] may ask it to drop its caption, show its status as a dot, or leave
+ * out the name. TalkBack still reads every word.
  */
 @Composable
 internal fun NovaEnvironmentBar(
@@ -64,26 +69,34 @@ internal fun NovaEnvironmentBar(
     framed: Boolean = false,
     /** A Space change is on the wire: the caption says so and the control waits for the answer. */
     changing: Boolean = false,
+    /** The caption line; the strip leaves it out first when the row is tight. */
+    showCaption: Boolean = true,
+    /** The status as a dot instead of a badge with words. */
+    compactStatus: Boolean = false,
+    /** The name itself; left out only when nothing else was enough, leaving avatar and chevron. */
+    showName: Boolean = true,
 ) {
     val colors = LocalNovaComposeColors.current
     val surfaces = LocalNovaLibrarySurfaces.current
     val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
-    val label = NovaSpacesCopy.environmentLabel(spaces, statusKnown, changing)
-    val caption = stringResource(label.caption)
-    val name = label.nameRes?.let { stringResource(it) } ?: label.spaceName.orEmpty()
-    val status = label.status?.let { stringResource(it) }
+    val strings = rememberNovaEnvironmentStrings(spaces, statusKnown, changing)
+    val caption = strings.caption
+    val name = strings.name
+    val status = strings.status
     val spoken = listOfNotNull("$caption: $name", status).joinToString(", ")
     val change = stringResource(R.string.nova_space_change)
     val minHeight = if (compact) 48.dp else 54.dp
     Box(modifier.testTag("nova-library-environment")) {
-        if (label.offersChoice) {
+        if (strings.offersChoice) {
             val active = enabled && !changing
             NovaActionSurface(
                 onClick = onChoose,
                 enabled = active,
                 contentDescription = "$spoken. $change.",
                 minHeight = minHeight,
-                cornerRadius = NovaRadius.row,
+                // Beside Options and System in the strip it wears their shape; a full-width row
+                // keeps the row radius every selectable row uses.
+                cornerRadius = if (framed) NovaRadius.row else NovaRadius.hero,
                 contentPadding = PaddingValues(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
                 contentAlignment = Alignment.CenterStart,
                 modifier = (if (framed) Modifier.fillMaxWidth() else Modifier).testTag("nova-environment-choose"),
@@ -102,6 +115,9 @@ internal fun NovaEnvironmentBar(
                         else -> colors.textSecondary
                     },
                     fill = framed,
+                    showCaption = showCaption,
+                    compactStatus = compactStatus,
+                    showName = showName,
                 )
             }
         } else {
@@ -133,10 +149,36 @@ internal fun NovaEnvironmentBar(
                     captionColor = colors.textSecondary,
                     chevronColor = null,
                     fill = framed,
+                    showCaption = showCaption,
+                    compactStatus = compactStatus,
+                    showName = showName,
                 )
             }
         }
     }
+}
+
+/** The control's words as the host gave them, shared by the control and the strip that measures it. */
+internal data class NovaEnvironmentStrings(
+    val caption: String,
+    val name: String,
+    val status: String?,
+    val offersChoice: Boolean,
+)
+
+@Composable
+internal fun rememberNovaEnvironmentStrings(
+    spaces: PolarisSpaces,
+    statusKnown: Boolean,
+    changing: Boolean,
+): NovaEnvironmentStrings {
+    val label = NovaSpacesCopy.environmentLabel(spaces, statusKnown, changing)
+    return NovaEnvironmentStrings(
+        caption = stringResource(label.caption),
+        name = label.nameRes?.let { stringResource(it) } ?: label.spaceName.orEmpty(),
+        status = label.status?.let { stringResource(it) },
+        offersChoice = label.offersChoice,
+    )
 }
 
 /** Avatar, caption over name, status and, when the row is an action, the chevron that says so. */
@@ -151,34 +193,59 @@ private fun NovaEnvironmentLabelRow(
     captionColor: Color,
     chevronColor: Color?,
     fill: Boolean,
+    showCaption: Boolean,
+    compactStatus: Boolean,
+    showName: Boolean,
 ) {
+    val colors = LocalNovaComposeColors.current
     Row(
         modifier = if (fill) Modifier.fillMaxWidth() else Modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
     ) {
         NovaSpaceAvatar(name, Modifier.size((if (compact) 28.dp else 34.dp) * fontScale), decorative = true)
-        Column(Modifier.weight(1f, fill = fill), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = caption,
-                color = captionColor,
-                fontSize = if (compact) 10.sp else 12.sp,
-                lineHeight = if (compact) 12.sp else 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (showCaption || showName || status != null) Column(
+            Modifier.weight(1f, fill = fill),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            if (showCaption) {
                 Text(
-                    text = name,
-                    color = nameColor,
-                    fontSize = if (compact) 13.sp else 16.sp,
-                    lineHeight = if (compact) 16.sp else 20.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text = caption,
+                    color = captionColor,
+                    fontSize = if (compact) 10.sp else 12.sp,
+                    lineHeight = if (compact) 12.sp else 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
                 )
-                status?.let { NovaBadge(text = it, modifier = Modifier.testTag("nova-environment-status")) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (showName) {
+                    Text(
+                        text = name,
+                        color = nameColor,
+                        fontSize = if (compact) 13.sp else 16.sp,
+                        lineHeight = if (compact) 16.sp else 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                status?.let {
+                    if (compactStatus) {
+                        // The words go before the name does; the dot keeps the state visible and
+                        // TalkBack reads it from the control's description.
+                        Spacer(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(colors.accent)
+                                .testTag("nova-environment-status-dot"),
+                        )
+                    } else {
+                        NovaBadge(text = it, modifier = Modifier.testTag("nova-environment-status"))
+                    }
+                }
             }
         }
         chevronColor?.let {
@@ -200,8 +267,7 @@ private fun NovaEnvironmentLabelRow(
 @Composable
 internal fun NovaSpaceAvatar(name: String, modifier: Modifier = Modifier, decorative: Boolean = false) {
     val colors = LocalNovaComposeColors.current
-    val person = name.trim().removeSuffix(" Space").removeSuffix("’s").removeSuffix("'s")
-    val initials = person.split(Regex("\\s+")).take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString("")
+    val initials = novaSpaceInitials(name)
     Box(
         modifier
             .size(38.dp)
@@ -212,4 +278,16 @@ internal fun NovaSpaceAvatar(name: String, modifier: Modifier = Modifier, decora
     ) {
         Text(initials, color = colors.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
+}
+
+/**
+ * Up to two initials from the words of a Space name. Words without a letter or digit are skipped,
+ * so "papi - steam" is "PS", not "P-".
+ */
+internal fun novaSpaceInitials(name: String): String {
+    val person = name.trim().removeSuffix(" Space").removeSuffix("’s").removeSuffix("'s")
+    return person.split(Regex("\\s+"))
+        .mapNotNull { word -> word.firstOrNull { it.isLetterOrDigit() }?.uppercase() }
+        .take(2)
+        .joinToString("")
 }

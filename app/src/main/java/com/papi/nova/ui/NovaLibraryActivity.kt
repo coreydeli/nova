@@ -1702,11 +1702,13 @@ class NovaLibraryActivity : NovaActivity() {
                                 polarisReady = clientSettings != null,
                                 onOpenOptions = onOpenOptions,
                                 onOpenSystemMenu = onOpenSystemMenu,
+                                continueCard = model.hero.topBarContinue(),
                                 continueSlot = if (showContinue) {
-                                    {
+                                    { fit ->
                                         NovaLibraryShowcaseContinue(
                                             hero = model.hero,
                                             apiClient = apiClient,
+                                            fit = fit,
                                             onPrimaryAction = {
                                                 when (model.hero.primaryAction) {
                                                     NovaLibraryHeroPrimaryAction.RESUME,
@@ -2284,6 +2286,8 @@ class NovaLibraryActivity : NovaActivity() {
     private fun RowScope.NovaLibraryShowcaseContinue(
         hero: NovaLibraryHeroState,
         apiClient: PolarisApiClient,
+        /** What the strip had room for: the cover goes first, then the words, End Session last. */
+        fit: NovaTopBarFit,
         onPrimaryAction: () -> Unit,
         onSecondaryAction: (() -> Unit)?,
     ) {
@@ -2299,7 +2303,7 @@ class NovaLibraryActivity : NovaActivity() {
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             val game = hero.game
-            if (game != null) {
+            if (game != null && fit.showContinueCover) {
                 val shape = RoundedCornerShape(NovaRadius.chip)
                 Box(
                     modifier = Modifier
@@ -2329,7 +2333,7 @@ class NovaLibraryActivity : NovaActivity() {
                     }
                 }
             }
-            Column(
+            if (fit.showContinueText) Column(
                 modifier = Modifier.weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
@@ -2354,11 +2358,13 @@ class NovaLibraryActivity : NovaActivity() {
                 text = hero.actionLabel,
                 onClick = onPrimaryAction,
                 modifier = Modifier.widthIn(min = 88.dp),
+                // Without the title on screen the action still says what it continues.
+                contentDescription = if (fit.showContinueText) hero.actionLabel else "${hero.actionLabel}, ${hero.title}",
                 minHeight = 30.dp,
                 fontSize = 10.sp,
             )
             val secondaryLabel = hero.secondaryActionLabel
-            if (secondaryLabel != null && onSecondaryAction != null) {
+            if (secondaryLabel != null && onSecondaryAction != null && fit.showContinueSecondary) {
                 NovaActionButton(
                     text = secondaryLabel,
                     onClick = onSecondaryAction,
