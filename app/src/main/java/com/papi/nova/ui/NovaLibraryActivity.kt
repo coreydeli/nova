@@ -2358,6 +2358,8 @@ class NovaLibraryActivity : NovaActivity() {
                 text = hero.actionLabel,
                 onClick = onPrimaryAction,
                 modifier = Modifier.widthIn(min = 88.dp),
+                // The card's own action is the next step, so it carries the accent; End Session stays quiet.
+                primary = true,
                 // Without the title on screen the action still says what it continues.
                 contentDescription = if (fit.showContinueText) hero.actionLabel else "${hero.actionLabel}, ${hero.title}",
                 minHeight = 30.dp,

@@ -573,6 +573,15 @@ class NovaComposeSourceGuardTest {
                 0 until landscape.indexOf("NovaLibraryContent(") &&
                 landscape.contains("NovaLibraryShowcaseContinue(")
         )
+        val continueCard = source.section(
+            "private fun RowScope.NovaLibraryShowcaseContinue(",
+            "private fun NovaLibraryTopHeader("
+        )
+        assertTrue(
+            "the strip card's own action (Resume Stream while a game is live) is the highlighted button and End Session stays secondary, so the next step reads at a glance",
+            continueCard.substringBefore("val secondaryLabel").contains("primary = true") &&
+                continueCard.substringAfter("val secondaryLabel").contains("primary = false")
+        )
         assertTrue(
             "landscape library should restore the recent rail after picker/grid content, not between hero and picker",
             landscape.indexOf("NovaLibraryContent(") in 0 until landscape.indexOf("NovaLibraryRecentRail(")
