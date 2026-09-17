@@ -374,7 +374,8 @@ internal fun NovaLibraryLandscapeShowcaseStripContent(
     }
 }
 
-private val NOVA_TOP_BAR_HORIZONTAL_PADDING = 10.dp
+/** The mapper owns the inset, because the poster grid lines its artwork up with it. */
+private val NOVA_TOP_BAR_HORIZONTAL_PADDING = NovaLibraryUiStateMapper.libraryBarContentInsetDp().dp
 private val NOVA_TOP_BAR_GAP = 8.dp
 private const val NOVA_TOP_BAR_IDENTITY_CAP = 168f
 private const val NOVA_TOP_BAR_IDENTITY_FLOOR = 56f

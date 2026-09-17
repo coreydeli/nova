@@ -2,6 +2,7 @@ package com.papi.nova.ui
 
 import com.papi.nova.shared.polaris.model.PolarisGame
 import com.papi.nova.api.PolarisSessionStatus
+import kotlin.math.ceil
 
 enum class NovaLibraryPrimaryFilter {
     ALL,
@@ -59,6 +60,11 @@ data class NovaLibraryGridViewportSpec(
     val rowPitchDp: Int,
     val fullRows: Int,
     val peekDp: Int,
+    /**
+     * The grid's top content inset: how far a focused poster in the first row reaches
+     * above its slot. Rows and peek are counted below it.
+     */
+    val topInsetDp: Int = 0,
 )
 
 internal data class NovaPosterPresentationSpec(
@@ -288,6 +294,19 @@ object NovaLibraryUiStateMapper {
     private const val MIN_GRID_POSTER_WIDTH_DP = 72
     private const val MAX_EXTRA_GRID_COLUMNS = 3
     private const val MIN_GRID_PEEK_DP = 16
+
+    /**
+     * How far a focused poster lifts. NovaPosterFocusedLift reads this, so the card and
+     * the grid's top inset share one number instead of two that happen to agree.
+     */
+    private const val POSTER_FOCUS_LIFT_DP = 10
+
+    /**
+     * How far the library bars inset their content from their outer edge, where the host
+     * name and the right-hand buttons start. With no panel framing the posters, the grid
+     * lines its artwork up with this edge instead.
+     */
+    private const val LIBRARY_BAR_CONTENT_INSET_DP = 10
 
     /**
      * Clearance for the overlaid hint bar at the end of a scroll. The bar used to
@@ -1122,6 +1141,52 @@ object NovaLibraryUiStateMapper {
 
     fun gridContentPaddingDp(): Int = GRID_CONTENT_PADDING_DP
 
+    fun posterFocusLiftDp(): Int = POSTER_FOCUS_LIFT_DP
+
+    /**
+     * How far above its layout slot a focused poster's artwork reaches: the lift, plus half
+     * of the height its focus scale adds (the scale grows about the centre), rounded up.
+     * The grid clips at its own top edge, so this is the inset the first row needs to stay
+     * whole when focused, and it is derived from the same spec the card animates.
+     */
+    fun posterFocusRiseDp(layoutMode: NovaLibraryLayoutMode, posterHeightDp: Int): Int {
+        val scaleGrowthDp = (posterPresentationSpec(layoutMode).focusedScale - 1f) *
+            posterHeightDp.coerceAtLeast(0) / 2f
+        // Float residue such as 1.10f - 1f = 0.100000024 must not round a whole dp up.
+        return ceil(POSTER_FOCUS_LIFT_DP + scaleGrowthDp.coerceAtLeast(0f) - 0.001f).toInt()
+    }
+
+    fun libraryBarContentInsetDp(): Int = LIBRARY_BAR_CONTENT_INSET_DP
+
+    /**
+     * The grid's side padding. Every poster cell carries its focus gutter on both sides, so
+     * the padding is the bar inset minus that gutter, and the artwork's outer edges land
+     * where the bar's content does.
+     */
+    fun gridSidePaddingDp(layoutMode: NovaLibraryLayoutMode): Int =
+        (LIBRARY_BAR_CONTENT_INSET_DP - posterPresentationSpec(layoutMode).focusGutterDp).coerceAtLeast(0)
+
+    /**
+     * The scroll distance a focus move asks for, as a BringIntoViewSpec reports it. A row
+     * scrolled to the top never sits closer to the grid's top edge than [leadingMargin],
+     * the focus rise, so its lifted artwork stays whole the way the first row's does; at
+     * the bottom the poster only has to be inside, because the lift moves it up.
+     */
+    fun gridFocusScrollDistance(
+        offset: Float,
+        size: Float,
+        containerSize: Float,
+        leadingMargin: Float,
+    ): Float {
+        val margin = leadingMargin.coerceAtMost((containerSize - size).coerceAtLeast(0f)).coerceAtLeast(0f)
+        val trailingEdge = offset + size
+        return when {
+            offset < margin -> offset - margin
+            trailingEdge > containerSize -> trailingEdge - containerSize
+            else -> 0f
+        }
+    }
+
     /**
      * Space between posters. The old 10dp sat on top of each card's own focus
      * gutter, so neighbouring artwork was 22dp apart against a 112dp poster,
@@ -1159,6 +1224,7 @@ object NovaLibraryUiStateMapper {
      */
     fun gridViewportSpec(
         contentWidthDp: Int,
+        /** The grid's whole height; the focus rise comes off the top before rows are counted. */
         viewportHeightDp: Int,
         layoutMode: NovaLibraryLayoutMode,
         windowClass: NovaLibraryWindowClass,
@@ -1175,11 +1241,13 @@ object NovaLibraryUiStateMapper {
             val posterWidthDp = cellWidthDp - gutter * 2
             if (posterWidthDp < MIN_GRID_POSTER_WIDTH_DP) break
             val poster = portraitPosterSizeForWidth(posterWidthDp)
+            val topInsetDp = posterFocusRiseDp(layoutMode, poster.heightDp)
+            val rowsHeightDp = (viewportHeightDp - topInsetDp).coerceAtLeast(0)
             val rowPitchDp = poster.heightDp + spacing
             val fullRows = if (rowPitchDp <= 0) {
                 0
             } else {
-                ((viewportHeightDp + spacing) / rowPitchDp).coerceAtLeast(0)
+                ((rowsHeightDp + spacing) / rowPitchDp).coerceAtLeast(0)
             }
             val candidate = NovaLibraryGridViewportSpec(
                 columns = columns,
@@ -1187,7 +1255,8 @@ object NovaLibraryUiStateMapper {
                 posterHeightDp = poster.heightDp,
                 rowPitchDp = rowPitchDp,
                 fullRows = fullRows,
-                peekDp = (viewportHeightDp - (fullRows * rowPitchDp - spacing)).coerceAtLeast(0),
+                peekDp = (rowsHeightDp - (fullRows * rowPitchDp - spacing)).coerceAtLeast(0),
+                topInsetDp = topInsetDp,
             )
             if (fallback == null) fallback = candidate
             if (fullRows >= targetRows) {
@@ -1205,7 +1274,9 @@ object NovaLibraryUiStateMapper {
             posterHeightDp = MIN_GRID_POSTER_WIDTH_DP * 3 / 2,
             rowPitchDp = MIN_GRID_POSTER_WIDTH_DP * 3 / 2 + spacing,
             fullRows = 0,
-            peekDp = viewportHeightDp.coerceAtLeast(0),
+            peekDp = (viewportHeightDp - posterFocusRiseDp(layoutMode, MIN_GRID_POSTER_WIDTH_DP * 3 / 2))
+                .coerceAtLeast(0),
+            topInsetDp = posterFocusRiseDp(layoutMode, MIN_GRID_POSTER_WIDTH_DP * 3 / 2),
         )
     }
 

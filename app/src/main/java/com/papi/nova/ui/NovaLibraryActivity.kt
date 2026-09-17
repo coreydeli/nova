@@ -30,6 +30,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -71,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -2793,7 +2796,7 @@ class NovaLibraryActivity : NovaActivity() {
         )
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
     @Composable
     private fun NovaLibraryContent(
         modifier: Modifier,
@@ -2829,11 +2832,9 @@ class NovaLibraryActivity : NovaActivity() {
                 NovaLibraryRecoveryAction.OPEN_SPACES -> openServerManagementAt("/#/spaces")
             }
         }
-        NovaLibraryPanel(
-            modifier = modifier,
-            subtle = true,
-            cinematic = layoutMode == NovaLibraryLayoutMode.STAGE,
-        ) {
+        // No panel frames the posters: they sit on the backdrop under the top bar, and the
+        // grid lines its artwork up with the bar's content instead of a box's inner edge.
+        Box(modifier = modifier) {
             if (
                 NovaLibraryUiStateMapper.shouldShowLoadFailure(
                     loadErrorMessage = loadErrorMessage,
@@ -2951,22 +2952,27 @@ class NovaLibraryActivity : NovaActivity() {
                         // whole rows in it. Taking a fixed column count and letting the
                         // remainder fall where it may is how the second row came to land
                         // a few dp short and read as clipped rather than as more below.
-                        val gridPaddingDp = NovaLibraryUiStateMapper.gridContentPaddingDp()
+                        val gridSidePaddingDp = NovaLibraryUiStateMapper.gridSidePaddingDp(layoutMode)
                         val viewportSpec = NovaLibraryUiStateMapper.gridViewportSpec(
-                            contentWidthDp = (maxWidth.value.toInt() - gridPaddingDp * 2)
+                            contentWidthDp = (maxWidth.value.toInt() - gridSidePaddingDp * 2)
                                 .coerceAtLeast(1),
-                            viewportHeightDp = (maxHeight.value.toInt() - gridPaddingDp)
-                                .coerceAtLeast(1),
+                            viewportHeightDp = maxHeight.value.toInt().coerceAtLeast(1),
                             layoutMode = layoutMode,
                             windowClass = windowClass,
                         )
+                        // The grid clips at its top edge, so the top inset is the focus rise:
+                        // a focused first-row poster stays whole and never reaches the bar.
+                        // A focus scroll keeps the same margin for rows it brings to the top.
+                        val focusRisePx = with(LocalDensity.current) { viewportSpec.topInsetDp.dp.toPx() }
+                        val focusScrollSpec = remember(focusRisePx) { NovaGridFocusRiseScrollSpec(focusRisePx) }
+                        CompositionLocalProvider(LocalBringIntoViewSpec provides focusScrollSpec) {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(viewportSpec.columns),
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(
-                                start = gridPaddingDp.dp,
-                                top = gridPaddingDp.dp,
-                                end = gridPaddingDp.dp,
+                                start = gridSidePaddingDp.dp,
+                                top = viewportSpec.topInsetDp.dp,
+                                end = gridSidePaddingDp.dp,
                                 bottom = NovaLibraryUiStateMapper.gridBottomContentPaddingDp(isLandscape).dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(
@@ -2997,6 +3003,7 @@ class NovaLibraryActivity : NovaActivity() {
                                     onOpenDetail = { onOpenDetail(game) },
                                 )
                             }
+                        }
                         }
                         // The grid scrolls, so its last visible row is cut mid-artwork. A
                         // short fade reads as there is more below instead of a severed edge.
@@ -4338,4 +4345,15 @@ class NovaLibraryActivity : NovaActivity() {
         )
         private val ACTIVE_SESSION_RESUME_REFRESH_DELAYS_MS = longArrayOf(1500L, 2000L, 3000L, 5000L, 8000L)
     }
+}
+
+/**
+ * Keeps a poster that focus scrolls to the top of the grid clear of the grid's top edge by
+ * its focus rise, so a lifted row stays whole the way the first row does under its top
+ * inset. The mapper owns the arithmetic so it is tested off the device.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private class NovaGridFocusRiseScrollSpec(private val leadingMarginPx: Float) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+        NovaLibraryUiStateMapper.gridFocusScrollDistance(offset, size, containerSize, leadingMarginPx)
 }

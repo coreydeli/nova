@@ -712,11 +712,21 @@ class NovaComposeSourceGuardTest {
                 mapper.contains("fun controllerHintBarMinHeightDp(): Int")
         )
         assertTrue(
-            "game grid should use mapper-owned inner padding with extra bottom scroll room so the final poster row can settle above the footer",
+            "game grid should use mapper-owned padding: sides that line the artwork up with the bar's content, a top inset that is the focus rise, and extra bottom scroll room so the final poster row can settle above the footer",
             content.contains("contentPadding = PaddingValues(") &&
-                content.contains("NovaLibraryUiStateMapper.gridContentPaddingDp()") &&
+                content.contains("NovaLibraryUiStateMapper.gridSidePaddingDp(layoutMode)") &&
+                content.contains("top = viewportSpec.topInsetDp.dp") &&
                 content.contains("bottom = NovaLibraryUiStateMapper.gridBottomContentPaddingDp(isLandscape).dp") &&
                 mapper.contains("fun gridBottomContentPaddingDp(isLandscape: Boolean): Int")
+        )
+        assertFalse(
+            "no panel frames the posters: papi asked for the box around them to go, and a bordered panel under a bordered bar read as two overlapping backgrounds",
+            content.contains("NovaLibraryPanel(")
+        )
+        assertTrue(
+            "the grid's whole height is its viewport, and a focus scroll keeps the focus rise clear at its top edge the way the first row's inset does",
+            content.contains("viewportHeightDp = maxHeight.value.toInt().coerceAtLeast(1)") &&
+                content.contains("CompositionLocalProvider(LocalBringIntoViewSpec provides focusScrollSpec)")
         )
     }
 

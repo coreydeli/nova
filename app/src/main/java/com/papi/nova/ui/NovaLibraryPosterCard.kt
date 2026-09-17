@@ -55,7 +55,8 @@ import com.papi.nova.ui.compose.novaConfirm
 import com.papi.nova.ui.compose.novaFocusTick
 
 private const val NovaPosterAnimationDurationMillis = 180
-internal val NovaPosterFocusedLift = 10.dp
+/** The mapper owns the number, because the grid's top inset is derived from it. */
+internal val NovaPosterFocusedLift = NovaLibraryUiStateMapper.posterFocusLiftDp().dp
 
 /**
  * Box art reads as box art, not as an app tile. The cinematic concept uses a 7px radius on a

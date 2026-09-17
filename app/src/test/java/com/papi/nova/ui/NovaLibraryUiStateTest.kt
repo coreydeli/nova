@@ -810,11 +810,14 @@ class NovaLibraryUiStateTest {
             40,
             NovaLibraryUiStateMapper.controllerHintBarBottomPaddingDp(isLandscape = false)
         )
-        assertEquals(
-            "default grid inset should keep the first poster row tucked inside the glass panel",
-            10,
-            NovaLibraryUiStateMapper.gridContentPaddingDp()
-        )
+        NovaLibraryLayoutMode.entries.forEach { mode ->
+            assertEquals(
+                "with no glass panel around the posters, $mode artwork lines up with the bar's content: side padding plus the focus gutter is the bar inset",
+                NovaLibraryUiStateMapper.libraryBarContentInsetDp(),
+                NovaLibraryUiStateMapper.gridSidePaddingDp(mode) +
+                    NovaLibraryUiStateMapper.posterPresentationSpec(mode).focusGutterDp
+            )
+        }
         assertTrue(
             "landscape grid scroll padding should leave the final poster row clear of the footer hint chrome",
             NovaLibraryUiStateMapper.gridBottomContentPaddingDp(isLandscape = true) >=
