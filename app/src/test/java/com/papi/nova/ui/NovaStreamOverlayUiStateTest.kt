@@ -22,7 +22,7 @@ class NovaStreamOverlayUiStateTest {
         val state = NovaReconnectOverlayState(attempt = 2, maxAttempts = 5)
 
         assertEquals("Reconnecting stream…", state.title)
-        assertEquals("Game is still running; Nova will resume automatically.", state.subtitle)
+        assertEquals("Nova is checking with the host and will resume the stream if it can.", state.subtitle)
         assertEquals("Attempt 2 of 5", state.attemptLabel)
     }
 

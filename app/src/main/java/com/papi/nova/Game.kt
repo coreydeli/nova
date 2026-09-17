@@ -229,6 +229,8 @@ private var spaceSession = false
 fun isSpaceSession(): Boolean = spaceSession
 private var novaLockScreenOverlay:com.papi.nova.ui.LockScreenOverlay? = null
 private var novaReconnectOverlay:com.papi.nova.ui.ReconnectOverlay? = null
+// Set while this Game is an automatic reconnect that has not held a stable stream yet.
+private var reconnectRecoveryTracker:com.papi.nova.manager.ReconnectRecoveryTracker? = null
 private var spinner:SpinnerDialog? = null
 private var displayedFailureDialog:Boolean = false
 private var connecting:Boolean = false
@@ -1102,11 +1104,29 @@ novaFeatureScope = com.papi.nova.manager.FeatureFlagManager.beginScope()
 novaApiClient = com.papi.nova.api.PolarisApiClient(this, host ?: "", httpsPort, serverCert)
 novaLockScreenOverlay = com.papi.nova.ui.LockScreenOverlay(this, novaApiClient!!)
 novaReconnectOverlay = com.papi.nova.ui.ReconnectOverlay(this)
+val reconnectAttemptsUsed:Int = this@Game.getIntent().getIntExtra(EXTRA_RECONNECT_ATTEMPT, 0)
+if (reconnectAttemptsUsed > 0)
+{
+reconnectRecoveryTracker = com.papi.nova.manager.ReconnectRecoveryTracker()
+}
 novaResilienceManager = com.papi.nova.manager.ConnectionResilienceManager(
 novaApiClient!!,
-{ LimeLog.info("Nova: Attempting reconnect...") },
-{ handlePolarisHostSessionEnded() },
-novaFeatureScope
+object : com.papi.nova.manager.ConnectionResilienceManager.Listener {
+override fun onReconnectPending(attempt:Int, maxAttempts:Int) {
+novaReconnectOverlay?.show(attempt, maxAttempts)
+}
+override fun onReconnect(errorCode:Int, attempt:Int, maxAttempts:Int) {
+reconnectAfterStreamError(errorCode, attempt, maxAttempts)
+}
+override fun onHostSessionEnded() {
+handlePolarisHostSessionEnded()
+}
+override fun onHostUnreachable(errorCode:Int) {
+endStreamAfterUnreachableHost(errorCode)
+}
+},
+novaFeatureScope,
+reconnectAttemptsUsed
 )
 com.papi.nova.jni.PolarisNativeHook.register(novaResilienceManager!!)
 syncDisconnectResumeTimeoutPolicy()
@@ -3318,7 +3338,7 @@ novaLockScreenOverlay!!.destroy()
 }
 if (novaReconnectOverlay != null) novaReconnectOverlay!!.dismiss()
 novaResilienceManager?.shutdown()
-com.papi.nova.jni.PolarisNativeHook.unregister()
+com.papi.nova.jni.PolarisNativeHook.unregister(novaResilienceManager)
 com.papi.nova.manager.FeatureFlagManager.reset(novaFeatureScope)
 
 if (novaDisconnectReceiver != null)
@@ -6037,6 +6057,13 @@ override fun onPerfSample(sample:PerfOverlaySample) {
 runOnUiThread(object : Runnable {
 override fun run() {
 lastCompanionPerfSample = sample
+val recoveryTracker = reconnectRecoveryTracker
+if (recoveryTracker != null && recoveryTracker.onSample(sample.framesRendered, android.os.SystemClock.elapsedRealtime()))
+{
+reconnectRecoveryTracker = null
+getIntent().removeExtra(EXTRA_RECONNECT_ATTEMPT)
+novaResilienceManager?.onReconnectSuccess()
+}
 doctorTelemetry.recordPerfSample(sample)
 uploadDoctorSample(sample)
                 if (novaHud != null && novaHud!!.isShowing)
@@ -7083,12 +7110,24 @@ getClipboard(-1)
 finish()
 }
  fun relaunchStream() {
+launchReplacementStream(0)
+}
+
+// Both the terminated dialog's Reconnect button and the automatic reconnect end up here. Only
+// the automatic path carries its attempt count into the next Game, which is how the budget in
+// ConnectionResilienceManager survives a relaunch; someone asking again starts with a fresh one.
+private fun launchReplacementStream(reconnectAttempt:Int) {
 var relaunchIntent:Intent = Intent(getIntent())
 relaunchIntent.setClass(getApplicationContext(), Game::class.java)
 relaunchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
 relaunchIntent.removeExtra(EXTRA_LAUNCH_OPTIMIZATION)
 relaunchIntent.removeExtra(EXTRA_RECOVERY_RUN_ID)
 relaunchIntent.removeExtra(EXTRA_RESUME_EXISTING)
+relaunchIntent.removeExtra(EXTRA_RECONNECT_ATTEMPT)
+if (reconnectAttempt > 0)
+{
+relaunchIntent.putExtra(EXTRA_RECONNECT_ATTEMPT, reconnectAttempt)
+}
 if (prefConfig!!.smartClipboardSync)
 {
 getClipboard(-1)
@@ -7096,6 +7135,42 @@ getClipboard(-1)
 finish()
 Handler(Looper.getMainLooper()).postDelayed({ GameDisplayLaunchTrampolineActivity.launchGameOnRequestedDisplay(getApplicationContext(), relaunchIntent)
 overridePendingTransition(0, 0) }, 900)
+}
+
+// The resilience manager absorbed a stream error and the host still holds the session. The
+// native side never delivered connectionTerminated for that error, so this does the same
+// teardown before launching the stream again.
+private fun reconnectAfterStreamError(errorCode:Int, attempt:Int, maxAttempts:Int) {
+runOnUiThread {
+if (isFinishing || isDestroyed || displayedFailureDialog || hostSessionEnded)
+{
+LimeLog.info("Nova: Not reconnecting after error $errorCode; the stream is already closing")
+novaReconnectOverlay?.dismiss()
+return@runOnUiThread
+}
+displayedFailureDialog = true
+LimeLog.info("Nova: Reconnecting after error $errorCode (attempt $attempt/$maxAttempts)")
+controllerHandler?.stop()
+timerHandler?.removeCallbacksAndMessages(null)
+setInputGrabState(false)
+stopConnection()
+launchReplacementStream(attempt)
+}
+}
+
+// The host never answered the session checks, so there is nothing to resume from here. The
+// error goes back to the ordinary terminated path, which tears the stream down and offers
+// Reconnect. Runs on the resilience thread, where connectionTerminated's port test belongs.
+private fun endStreamAfterUnreachableHost(errorCode:Int) {
+// A check interrupted by onDestroy or by the host-ended teardown also lands here, and so does
+// one that outlived onStop. Each of those already ended the stream; a second ending must not run.
+if (isFinishing || isDestroyed || hostSessionEnded || displayedFailureDialog)
+{
+novaReconnectOverlay?.dismiss()
+return
+}
+novaReconnectOverlay?.dismiss()
+connectionTerminated(errorCode)
 }
  fun quit() {
 val companionPresentation:ExternalDisplayControlHost? = externalDisplayControlPresentation
@@ -7372,6 +7447,7 @@ const val EXTRA_FORCE_PRIVATE_AFTER_STEAM_CLOSE:String = "ForcePrivateAfterSteam
  private const val EXTRA_LAUNCH_POLICY_TOKEN:String = "NovaLaunchPolicyToken"
  const val EXTRA_RECOVERY_RUN_ID:String = "RecoveryRunId"
  const val EXTRA_RESUME_EXISTING:String = "ResumeExisting"
+ const val EXTRA_RECONNECT_ATTEMPT:String = "ReconnectAttempt"
  const val EXTRA_SERVER_COMMANDS:String = "ServerCommands"
  const val EXTRA_DISPLAY_ID:String = "DisplayID"
 

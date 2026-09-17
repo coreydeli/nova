@@ -27,7 +27,7 @@ data class NovaReconnectOverlayState(
     val attempt: Int,
     val maxAttempts: Int,
     val title: String = "Reconnecting stream…",
-    val subtitle: String = "Game is still running; Nova will resume automatically."
+    val subtitle: String = "Nova is checking with the host and will resume the stream if it can."
 ) {
     val attemptLabel: String = "Attempt $attempt of $maxAttempts"
 }
