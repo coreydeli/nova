@@ -848,6 +848,23 @@ class NovaLaunchSourceGuardTest {
     }
 
     @Test
+    fun aSpaceLaunchSaysWhereItRunsOnceAndIsNeverAFallback() {
+        val detail = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailActivity.kt")
+        val content = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailContent.kt")
+        val state = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailUiState.kt")
+        assertTrue(
+            "a Space game runs in its Space with its own Steam sign-in and saves. The host lists only the " +
+                "Space's mode for it, which made the host default look unavailable, so every Space launch said " +
+                "twice, in the warning colour, that Private Stream was not ready",
+            state.contains("get() = !runsInSpace &&") &&
+                state.contains("runsInSpace = NovaSpaceUiState.isSpace(game),") &&
+                detail.contains("if (uiState.runsInSpace) {") &&
+                detail.contains("R.string.nova_space_launch_intro") &&
+                content.contains("hostFacts = if (uiState.runsInSpace) emptyList() else buildList {")
+        )
+    }
+
+    @Test
     fun launchCopyNamesTheExactResolvedModeAndAutomaticFallbackHonestly() {
         val detail = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailActivity.kt")
         val content = readSource("src/main/java/com/papi/nova/ui/NovaGameDetailContent.kt")

@@ -1764,6 +1764,7 @@
     <string name="nova_space_open_in_polaris">Open Spaces in Polaris</string>
     <string name="nova_space_retry_check">Retry Space Check</string>
     <string name="nova_space_change_caption">Pick whose games, Steam sign-in and saves this game uses.</string>
+    <string name="nova_space_launch_intro">Runs in %1$s, with its own Steam sign-in and saves.</string>
     <string name="nova_space_where_it_opens">Where this game opens</string>
     <string name="nova_space_option_desktop">Use this computer’s usual games and account.</string>
     <string name="nova_space_option_desktop_missing">Not in this computer’s Desktop library. Use Change Space in the Library to switch to Desktop.</string>

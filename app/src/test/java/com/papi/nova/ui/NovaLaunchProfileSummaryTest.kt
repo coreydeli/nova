@@ -978,4 +978,123 @@ class NovaLaunchProfileSummaryTest {
         assertTrue(summary.selectedLine, summary.selectedLine.endsWith(" · HDR"))
         assertFalse(summary.selectedLine.contains("not requested"))
     }
+
+
+    private fun spaceLaunch(): JSONObject {
+        fun field(value: Any) = JSONObject()
+            .put("value", value)
+            .put("source", "capability_validation")
+            .put("locked", true)
+            .put("normalized", false)
+            .put("reason_code", "worker_media_contract")
+        return JSONObject()
+            .put("status", true)
+            .put("source", "worker_profile_v1")
+            .put(
+                "worker_profile",
+                JSONObject()
+                    .put("version", 1)
+                    .put("id", "15ab1141-72db-4e28-a138-463a0dd1d98a")
+                    .put("codec", "h264")
+                    .put("audio_channels", 2)
+                    .put("target", "big-picture-v1"),
+            )
+            .put(
+                "resolved_profile",
+                JSONObject()
+                    .put("policy_version", 1)
+                    .put("preset", "worker")
+                    .put(
+                        "fields",
+                        JSONObject()
+                            .put("display_mode", field("1920x1080x120"))
+                            .put("display_width", field(1920))
+                            .put("display_height", field(1080))
+                            .put("target_fps", field(120))
+                            .put("target_bitrate_kbps", field(8000))
+                            .put("hdr", field(false))
+                            .put("preferred_codec", field("h264")),
+                    ),
+            )
+            .put("topology_resolution", JSONObject().put("resolved", "gamescope_stream"))
+            .put("reasoning", "Your Space uses H.264, SDR and stereo audio.")
+    }
+
+    private fun NovaLaunchProfileSummary.allText(): List<String> = listOf(
+        primaryLaunchLabel, requestedLine, selectedLine, reasonLine, limitingLine, noticeDetail,
+        noticeRecommendation, noticeLabel, freshnessLine, retryHighFpsLabel, grantHoldReason,
+        profileLabel, profileDescription,
+    ) + historyLines
+
+    @Test
+    fun aSpaceLaunchNamesWhatWasResolvedAndNeverCallsItAProfile() {
+        // The host answers a Space launch with its Space contract and no profile state. That fell
+        // through to the generic path, where the missing state became "Profile", and Play Setup
+        // printed "Granted: Profile" under a Space's Steam Big Picture.
+        val summary = buildNovaLaunchProfileSummary(
+            spaceLaunch(),
+            clientAskedFps = 120.0,
+            clientAskedHdr = true,
+            spaceName = "Living room",
+        )
+
+        requireNotNull(summary)
+        assertEquals("Resolved: 1920×1080 @ 120 FPS · 8.0 Mbps · H264 · SDR", summary.selectedLine)
+        assertEquals("Launch in Living room · 120 FPS", summary.primaryLaunchLabel)
+        assertEquals("", summary.requestedLine)
+        assertEquals("Reason: Your Space uses H.264, SDR and stereo audio.", summary.reasonLine)
+        assertEquals("", summary.profileLabel)
+        assertEquals("", summary.freshnessLine)
+        summary.allText().forEach { assertFalse(it, it.contains("profile", ignoreCase = true)) }
+
+        val plan = novaPlaySetupPlan(
+            modeLabel = "Gamescope Stream",
+            lines = listOf(novaPlaySetupValue(summary.selectedLine)),
+            summary = summary,
+            lastSessionKey = "Last session",
+            limitedByKey = "Limited by",
+            askedKey = "Asked",
+            profileKey = "Profile",
+            grantedFormat = "Granted: %1${'$'}s",
+        )
+        assertEquals(listOf("1920×1080 @ 120 FPS · 8.0 Mbps · H264 · SDR"), plan.lines)
+        assertTrue("a Space launch earns no Profile fact and no repeat of what it resolved", plan.facts.isEmpty())
+    }
+
+    @Test
+    fun aSpaceLaunchSaysWhatWasAskedOnlyWhenTheSpaceGrantedLess() {
+        val summary = buildNovaLaunchProfileSummary(
+            spaceLaunch(),
+            clientAskedFps = 240.0,
+            clientAskedHdr = false,
+            spaceName = "Living room",
+        )
+
+        requireNotNull(summary)
+        assertEquals("Requested: 240 FPS", summary.requestedLine)
+        assertEquals("Resolved: 1920×1080 @ 120 FPS · 8.0 Mbps · H264 · SDR (HDR not requested)", summary.selectedLine)
+        val plan = novaPlaySetupPlan(
+            modeLabel = "Gamescope Stream",
+            lines = emptyList(),
+            summary = summary,
+            lastSessionKey = "Last session",
+            limitedByKey = "Limited by",
+            askedKey = "Asked",
+            profileKey = "Profile",
+            grantedFormat = "Granted: %1${'$'}s",
+        )
+        assertEquals(1, plan.facts.size)
+        assertEquals("Asked", plan.facts.single().key)
+        assertEquals("240 FPS", plan.facts.single().value)
+        assertEquals(
+            "Granted: 1920×1080 @ 120 FPS · 8.0 Mbps · H264 · SDR (HDR not requested)",
+            plan.facts.single().detail,
+        )
+    }
+
+    @Test
+    fun aSpaceLaunchWithoutItsNameStillNamesASpace() {
+        val summary = requireNotNull(buildNovaLaunchProfileSummary(spaceLaunch(), clientAskedFps = 120.0))
+        assertEquals("Launch in your Space · 120 FPS", summary.primaryLaunchLabel)
+    }
 }

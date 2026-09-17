@@ -436,7 +436,10 @@ internal fun NovaGameDetailContent(
                             askedKey = stringResource(R.string.nova_play_setup_fact_asked),
                             profileKey = stringResource(R.string.nova_play_setup_fact_profile),
                             grantedFormat = stringResource(R.string.nova_play_setup_granted_format),
-                            hostFacts = buildList {
+                            // A Space game runs in its Space's own session, so neither the host's
+                            // default mode nor its profile is what this launch uses. Stating them
+                            // beside it read as a fallback that was not happening.
+                            hostFacts = if (uiState.runsInSpace) emptyList() else buildList {
                                 if (uiState.hostStreamDisplayModeLabel.isNotBlank()) {
                                     val safeFallbackDetail = if (uiState.usesSafeHostFallback) {
                                         buildList {

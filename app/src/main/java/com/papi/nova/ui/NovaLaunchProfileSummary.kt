@@ -17,11 +17,13 @@ internal fun NovaGameDetailOptimizationState.withLaunchProfileSummary(
     launchOptimization: JSONObject?,
     clientAskedFps: Double,
     clientAskedHdr: Boolean? = null,
+    spaceName: String = "",
 ): NovaGameDetailOptimizationState = copy(
     profileSummary = buildNovaLaunchProfileSummary(
         launchOptimization,
         clientAskedFps = clientAskedFps,
         clientAskedHdr = clientAskedHdr,
+        spaceName = spaceName,
     ),
 )
 
@@ -62,12 +64,17 @@ internal fun buildNovaLaunchProfileSummary(
      * know. "SDR" alone hid the difference between a host that refused HDR and a client that
      * never asked, which is where someone who has fixed everything on the host ends up.
      */
-    clientAskedHdr: Boolean? = null
+    clientAskedHdr: Boolean? = null,
+    /** The Space this game opens in, for a launch the host answered with its Space contract. */
+    spaceName: String = "",
 ): NovaLaunchProfileSummary? {
     if (optimization == null) return null
     val pinnedFps = if (clientFpsPinned && clientAskedFps > 0.0) clientAskedFps else 0.0
     if (optimization.optString("source", "").equals("deterministic_preset_v1", ignoreCase = true)) {
         return buildDeterministicLaunchPresetSummary(optimization, pinnedFps, clientAskedFps, clientAskedHdr)
+    }
+    if (optimization.optString("source", "").equals(SPACE_LAUNCH_SOURCE, ignoreCase = true)) {
+        return buildSpaceLaunchSummary(optimization, spaceName, clientAskedFps, clientAskedHdr)
     }
 
     val profileState = optimization.optJSONObject("profile_state")
@@ -273,17 +280,110 @@ private fun buildDeterministicLaunchPresetSummary(
     val resolved = optimization.optJSONObject("resolved_profile") ?: return null
     if (resolved.optInt("policy_version", 0) != 1) return null
     val fields = resolved.optJSONObject("fields") ?: return null
-    fun detail(name: String): JSONObject? = fields.optJSONObject(name)
-    fun value(name: String): Any? = detail(name)?.opt("value")?.takeUnless { it === JSONObject.NULL }
 
     val preset = normalized(resolved.optString("preset", optimization.optString("preset", "auto")))
     val presetLabel = resolved.optString("preset_label", "").takeIf { it.isNotBlank() }
         ?: preferenceLabel(preset)
+    val resolvedFields = resolvedLaunchFields(fields, clientAskedHdr)
+    val resolvedFps = resolvedFields.fps
+    val effectiveFps = if (pinnedFps > 0.0) pinnedFps else resolvedFps
+    val selectedParts = resolvedFields.parts
+    val hdrNotRequested = resolvedFields.hdrNotRequested
+
+    val asked = if (clientAskedFps > 0.0) " · ${formatFps(clientAskedFps)} FPS" else ""
+    val profileDescription =
+        "Polaris resolved this from the launch request, paired-device settings, and current host capabilities."
+    return NovaLaunchProfileSummary(
+        primaryLaunchLabel = if (effectiveFps > 0.0) {
+            "Launch $presetLabel · ${formatFps(effectiveFps)} FPS"
+        } else {
+            "Launch $presetLabel"
+        },
+        requestedLine = "Requested: $presetLabel$asked",
+        selectedLine = "Resolved: ${selectedParts.joinToString(" · ").ifBlank { presetLabel }}",
+        reasonLine = "Deterministic preset v1; Doctor history and AI output cannot change these fields.",
+        limitingLine = "",
+        noticeDetail = profileDescription,
+        noticeRecommendation = if (hdrNotRequested) {
+            "HDR is off in this client's Settings (Request HDR when host supports it). Turn it on to ask; Polaris decides from there."
+        } else {
+            "Doctor observations do not change launch settings."
+        },
+        noticeTone = NovaLaunchProfileNoticeTone.HEALTHY,
+        noticeLabel = "Launch preset",
+        freshnessLine = "Resolved for this launch",
+        historyLines = emptyList(),
+        showRetryHighFps = false,
+        retryHighFpsLabel = "",
+        grantHoldReason = "",
+        profileLabel = presetLabel,
+        profileDescription = profileDescription
+    )
+}
+
+/** The source a host's Space launch answer carries, from its worker contract. */
+private const val SPACE_LAUNCH_SOURCE = "worker_profile_v1"
+
+/**
+ * A Space launch, which the host answers with its Space contract rather than a quality profile.
+ *
+ * The host resolves a Space stream from the device and the Space's own limits, states them as
+ * locked fields, and sends no profile state at all. That is how this used to fall through to the
+ * generic path, where the missing state became "Profile" and Play Setup printed "Granted:
+ * Profile". A Space is named by its name, and the stream by what was resolved. What was asked
+ * earns a line only when the Space granted less, and nothing here is labelled a profile, because
+ * Play Setup draws a profile label under a Profile key.
+ */
+private fun buildSpaceLaunchSummary(
+    optimization: JSONObject,
+    spaceName: String,
+    clientAskedFps: Double,
+    clientAskedHdr: Boolean?,
+): NovaLaunchProfileSummary {
+    val space = spaceName.trim().ifBlank { "your Space" }
+    val fields = optimization.optJSONObject("resolved_profile")
+        ?.takeIf { it.optInt("policy_version", 0) == 1 }
+        ?.optJSONObject("fields")
+    val resolved = fields?.let { resolvedLaunchFields(it, clientAskedHdr) }
+    val fps = resolved?.fps ?: 0.0
+    val parts = resolved?.parts.orEmpty()
+    val reasoning = optimization.optString("reasoning", "").trim()
+    val askedMore = clientAskedFps > 0.0 && fps > 0.0 && clientAskedFps > fps + 0.5
+    return NovaLaunchProfileSummary(
+        primaryLaunchLabel = if (fps > 0.0) "Launch in $space · ${formatFps(fps)} FPS" else "Launch in $space",
+        requestedLine = if (askedMore) "Requested: ${formatFps(clientAskedFps)} FPS" else "",
+        selectedLine = if (parts.isNotEmpty()) "Resolved: ${parts.joinToString(" · ")}" else "",
+        reasonLine = reasoning.takeIf { it.isNotBlank() }?.let { "Reason: $it" }.orEmpty(),
+        limitingLine = "",
+        noticeDetail = reasoning,
+        noticeRecommendation = "",
+        noticeTone = NovaLaunchProfileNoticeTone.HEALTHY,
+        noticeLabel = "Space stream",
+        freshnessLine = "",
+        historyLines = emptyList(),
+        showRetryHighFps = false,
+        retryHighFpsLabel = "",
+        grantHoldReason = "",
+        profileLabel = "",
+        profileDescription = "",
+    )
+}
+
+/** What a resolved profile's locked fields say, shared by a launch preset and a Space launch. */
+private data class ResolvedLaunchFields(
+    val parts: List<String>,
+    val fps: Double,
+    val hdrNotRequested: Boolean,
+)
+
+private fun resolvedLaunchFields(fields: JSONObject, clientAskedHdr: Boolean?): ResolvedLaunchFields {
+    fun detail(name: String): JSONObject? = fields.optJSONObject(name)
+    fun value(name: String): Any? = detail(name)?.opt("value")?.takeUnless { it === JSONObject.NULL }
+
     val displayMode = value("display_mode") as? String ?: ""
     val resolvedFps = (value("target_fps") as? Number)?.toDouble()
         ?.takeIf { it.isFinite() && it > 0.0 }
         ?: parseDisplayModeFps(displayMode)
-    val effectiveFps = if (pinnedFps > 0.0) pinnedFps else resolvedFps
     val selectedParts = mutableListOf<String>()
     val width = (value("display_width") as? Number)?.toInt()?.takeIf { it > 0 }
     val height = (value("display_height") as? Number)?.toInt()?.takeIf { it > 0 }
@@ -316,36 +416,7 @@ private fun buildDeterministicLaunchPresetSummary(
             else -> "SDR"
         }
     }
-
-    val asked = if (clientAskedFps > 0.0) " · ${formatFps(clientAskedFps)} FPS" else ""
-    val profileDescription =
-        "Polaris resolved this from the launch request, paired-device settings, and current host capabilities."
-    return NovaLaunchProfileSummary(
-        primaryLaunchLabel = if (effectiveFps > 0.0) {
-            "Launch $presetLabel · ${formatFps(effectiveFps)} FPS"
-        } else {
-            "Launch $presetLabel"
-        },
-        requestedLine = "Requested: $presetLabel$asked",
-        selectedLine = "Resolved: ${selectedParts.joinToString(" · ").ifBlank { presetLabel }}",
-        reasonLine = "Deterministic preset v1; Doctor history and AI output cannot change these fields.",
-        limitingLine = "",
-        noticeDetail = profileDescription,
-        noticeRecommendation = if (hdrNotRequested) {
-            "HDR is off in this client's Settings (Request HDR when host supports it). Turn it on to ask; Polaris decides from there."
-        } else {
-            "Doctor observations do not change launch settings."
-        },
-        noticeTone = NovaLaunchProfileNoticeTone.HEALTHY,
-        noticeLabel = "Launch preset",
-        freshnessLine = "Resolved for this launch",
-        historyLines = emptyList(),
-        showRetryHighFps = false,
-        retryHighFpsLabel = "",
-        grantHoldReason = "",
-        profileLabel = presetLabel,
-        profileDescription = profileDescription
-    )
+    return ResolvedLaunchFields(selectedParts, resolvedFps, hdrNotRequested)
 }
 
 private fun buildHealthyPerformanceNoticeDetail(lastResult: JSONObject?, performanceStatus: String): String {

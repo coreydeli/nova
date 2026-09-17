@@ -1689,6 +1689,7 @@ class NovaGameDetailActivity : NovaActivity() {
                     clientAskedFps = (effectiveFpsPin(chosenFps, profilePreference, launchPreferences.fps)
                         ?: launchPreferences.fps.toInt()).toDouble(),
                     clientAskedHdr = launchPreferences.enableHdr,
+                    spaceName = launchSpaceName(),
                 )
                 if (spaceGame != null && com.papi.nova.manager.WorkerLaunchContract.isLegacyProfileApp(currentGame.id)) {
                     // The contract is parsed once per change, not on every recomposition.
@@ -2405,7 +2406,17 @@ class NovaGameDetailActivity : NovaActivity() {
         }
     }
 
+    /** The Space this game opens in, by name; blank for a Desktop game. */
+    private fun launchSpaceName(): String =
+        spaceGame?.let { game -> game.space?.name?.takeIf { it.isNotBlank() } ?: game.name }.orEmpty()
+
     private fun buildLaunchIntro(uiState: NovaGameDetailUiState): String {
+        // A Space game runs in its Space, with that Space's Steam sign-in and saves, whatever the
+        // host's default mode is. Said once and plainly: the host default is not what this launch
+        // uses, so calling it not ready made every Space launch read as a failure.
+        if (uiState.runsInSpace) {
+            return getString(R.string.nova_space_launch_intro, launchSpaceName())
+        }
         val parts = mutableListOf<String>()
         if (uiState.hostStreamDisplayMode in setOf(
                 PolarisClientSettings.MODE_DESKTOP_DISPLAY,
@@ -2641,6 +2652,7 @@ class NovaGameDetailActivity : NovaActivity() {
                 clientAskedFps = clientPreferences.fps.toDouble(),
                 clientFpsPinned = NovaLaunchStreamOverride.highFpsPin(profilePreference, clientPreferences.fps) != null,
                 clientAskedHdr = clientPreferences.enableHdr,
+                spaceName = launchSpaceName(),
             ),
             rawOptimization = opt,
             reviewRequired = StreamSyncManager.requiresLaunchPreflightReview(opt),
