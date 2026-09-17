@@ -1,8 +1,29 @@
 #include "deck_gamepad.h"
 #include <cstdlib>
 #include <iostream>
+#include <linux/joystick.h>
 
 using namespace nova::deck;
+
+namespace {
+struct JoystickQuery {
+    static inline int countResult = 0;
+    static inline int mapResult = ABS_CNT;
+    static int query(int, unsigned long request, void* data) {
+        if (request == JSIOCGAXES) {
+            *static_cast<unsigned char*>(data) = 8;
+            return countResult;
+        }
+        if (request == JSIOCGAXMAP) {
+            auto* axes = static_cast<unsigned char*>(data);
+            axes[6] = ABS_HAT0X;
+            axes[7] = ABS_HAT0Y;
+            return mapResult;
+        }
+        return -1;
+    }
+};
+}
 
 int main() {
     DeckGamepadNavigation navigation(6, 7); // Steam's virtual Xbox controller.
@@ -34,5 +55,17 @@ int main() {
     navigation = DeckGamepadNavigation(); // A controller with no hats must not map axis zero.
     expect(0, -32767, DeckGamepadAction::None);
     expect(1, 32767, DeckGamepadAction::None);
+    for (const int mapResult : {ABS_CNT, 0, -1}) {
+        JoystickQuery::mapResult = mapResult;
+        const auto axes = readDeckGamepadHatAxes(0, JoystickQuery::query);
+        navigation = DeckGamepadNavigation(axes.horizontal, axes.vertical);
+        expect(6, 32767, mapResult >= 0 ? DeckGamepadAction::RightPressed : DeckGamepadAction::None);
+        expect(7, -32767, mapResult >= 0 ? DeckGamepadAction::UpPressed : DeckGamepadAction::None);
+    }
+    JoystickQuery::countResult = -1;
+    JoystickQuery::mapResult = ABS_CNT;
+    const auto failedAxes = readDeckGamepadHatAxes(0, JoystickQuery::query);
+    navigation = DeckGamepadNavigation(failedAxes.horizontal, failedAxes.vertical);
+    expect(6, 32767, DeckGamepadAction::None);
     std::cout << "D-pad mapping, initialization, release and reconnect checks passed\n";
 }

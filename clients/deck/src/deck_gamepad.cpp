@@ -1,6 +1,37 @@
 #include "deck_gamepad.h"
 
+#ifdef __linux__
+#include <linux/joystick.h>
+#include <sys/ioctl.h>
+#endif
+
 namespace nova::deck {
+
+DeckGamepadHatAxes readDeckGamepadHatAxes(int fd, DeckGamepadIoctl query) {
+    DeckGamepadHatAxes result;
+#ifdef __linux__
+    if (!query) {
+        query = [](int device, unsigned long request, void* data) {
+            return ::ioctl(device, request, data);
+        };
+    }
+    unsigned char axes[ABS_CNT]{};
+    unsigned char axisCount = 0;
+    // JSIOCGAXMAP may return the number of bytes copied (64 on SteamOS).
+    // Only a negative ioctl return indicates failure.
+    if (query(fd, JSIOCGAXES, &axisCount) < 0 || query(fd, JSIOCGAXMAP, axes) < 0) {
+        return result;
+    }
+    for (int i = 0; i < axisCount && i < ABS_CNT; ++i) {
+        if (axes[i] == ABS_HAT0X) result.horizontal = i;
+        if (axes[i] == ABS_HAT0Y) result.vertical = i;
+    }
+#else
+    (void)fd;
+    (void)query;
+#endif
+    return result;
+}
 
 DeckGamepadAction decodeGamepadAction(const DeckGamepadEvent& event) {
     if ((event.type & kDeckGamepadInitEvent) != 0) {
