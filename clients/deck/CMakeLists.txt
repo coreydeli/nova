@@ -23,6 +23,7 @@ pkg_check_modules(NOVA_DECK_FFMPEG_VAAPI REQUIRED IMPORTED_TARGET
 pkg_check_modules(NOVA_DECK_LINUX_AUDIO REQUIRED IMPORTED_TARGET
     libpipewire-0.3
     libpulse
+    opus
 )
 find_package(Qt6 REQUIRED COMPONENTS Quick Network)
 
@@ -35,6 +36,8 @@ add_library(nova_deck_core STATIC
     src/stream/deck_gamestream_launch.cpp
     src/stream/deck_gamestream_session_builder.cpp
     src/stream/deck_stream_media_adapters.cpp
+    src/stream/deck_audio_output.cpp
+    src/stream/deck_opus_audio.cpp
     src/stream/deck_moonlight_handoff_preflight.cpp
     src/identity/deck_moonlight_identity.cpp
     src/polaris/deck_polaris_client.cpp
@@ -120,6 +123,27 @@ if(BUILD_TESTING)
     )
     target_link_libraries(nova_deck_stream_media_adapters_test PRIVATE nova_deck_core)
     add_test(NAME nova_deck_stream_media_adapters_test COMMAND nova_deck_stream_media_adapters_test)
+
+    add_executable(nova_deck_opus_audio_test tests/deck_opus_audio_test.cpp)
+    target_link_libraries(nova_deck_opus_audio_test PRIVATE nova_deck_core)
+    add_test(NAME nova_deck_opus_audio_test COMMAND nova_deck_opus_audio_test)
+    add_test(NAME nova_deck_audio_unavailable_test COMMAND nova_deck_opus_audio_test --unavailable)
+    set_tests_properties(nova_deck_opus_audio_test nova_deck_audio_unavailable_test PROPERTIES TIMEOUT 15)
+    find_program(NOVA_DECK_TEST_PIPEWIRE pipewire)
+    find_program(NOVA_DECK_TEST_PW_LINK pw-link)
+    if(NOVA_DECK_TEST_PIPEWIRE AND NOVA_DECK_TEST_PW_LINK)
+        foreach(mode IN ITEMS playback disconnect)
+            set(audio_test_args)
+            if(mode STREQUAL "disconnect")
+                list(APPEND audio_test_args --disconnect)
+            endif()
+            add_test(NAME nova_deck_pipewire_${mode}_test
+                COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/deck_pipewire_audio_test.py
+                    $<TARGET_FILE:nova_deck_opus_audio_test>
+                    ${NOVA_DECK_TEST_PIPEWIRE} ${NOVA_DECK_TEST_PW_LINK} ${audio_test_args})
+            set_tests_properties(nova_deck_pipewire_${mode}_test PROPERTIES TIMEOUT 20)
+        endforeach()
+    endif()
 
     add_executable(nova_deck_moonlight_handoff_preflight_test
         tests/deck_moonlight_handoff_preflight_test.cpp

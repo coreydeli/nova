@@ -1,5 +1,7 @@
 #pragma once
 
+#include "stream/deck_audio_output.h"
+
 #include "stream/deck_gamestream_session_builder.h"
 #include "stream/deck_stream_core.h"
 
@@ -21,6 +23,7 @@ class QSGTexture;
 struct AVBufferRef;
 struct AVCodecContext;
 struct AVFrame;
+struct OpusMSDecoder;
 
 namespace nova::deck::stream {
 
@@ -410,10 +413,23 @@ struct DeckAudioLifecycle {
     int samplesPerFrame = 0;
     int lastSampleLength = 0;
     bool networkStartAllowed = false;
+    std::uint64_t decodedFrames = 0;
+    std::uint64_t concealedFrames = 0;
+    std::uint64_t queuedFrames = 0;
+    std::uint64_t submittedFrames = 0;
+    std::uint64_t silenceFrames = 0;
+    std::uint64_t droppedFrames = 0;
+    int decodeErrors = 0;
+    bool outputReady = false;
+    bool active = false;
+    std::string lastError;
 };
 
 class DeckPipeWireAudio final : public DeckStreamAudio {
 public:
+    DeckPipeWireAudio();
+    explicit DeckPipeWireAudio(DeckPcmOutput& output);
+    ~DeckPipeWireAudio() override;
     std::string_view adapterName() const override;
     int init(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, void* context, int arFlags) override;
     void start() override;
@@ -425,9 +441,16 @@ public:
     DeckAudioLifecycle lifecycle() const;
 
 private:
+    void resetAudioLocked();
     mutable std::mutex lifecycleMutex_;
     DeckAudioLifecycle lifecycle_{};
     bool ready_ = false;
+    std::unique_ptr<DeckPcmOutput> ownedOutput_;
+    DeckPcmOutput* output_ = nullptr;
+    OpusMSDecoder* decoder_ = nullptr;
+    std::vector<float> pcm_;
+    int channels_ = 0;
+    bool readOutputStats_ = false;
 };
 
 class DeckGuardedStreamSessionPreviewProducer final : private DeckStreamSessionEvents {

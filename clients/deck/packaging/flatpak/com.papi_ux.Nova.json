@@ -11,6 +11,7 @@
     "--share=ipc",
     "--device=dri",
     "--device=input",
+    "--filesystem=xdg-run/pipewire-0",
     "--filesystem=xdg-run/gamescope-0",
     "--filesystem=~/.var/app/com.moonlight_stream.Moonlight/config:ro",
     "--filesystem=~/.local/share/Steam/userdata",

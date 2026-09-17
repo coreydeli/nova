@@ -1651,58 +1651,6 @@ DeckLinuxAudioProbe DeckLinuxAudioProbe::detect() {
     };
 }
 
-std::string_view DeckPipeWireAudio::adapterName() const {
-    return "pipewire-pcm-pulse-fallback-prototype";
-}
-
-int DeckPipeWireAudio::init(
-    const int audioConfiguration,
-    POPUS_MULTISTREAM_CONFIGURATION opusConfig,
-    void* context,
-    const int arFlags) {
-    (void)context;
-    (void)arFlags;
-    const std::lock_guard<std::mutex> lock(lifecycleMutex_);
-    ++lifecycle_.initCalls;
-    lifecycle_.audioConfiguration = audioConfiguration;
-    lifecycle_.samplesPerFrame = opusConfig == nullptr ? 0 : opusConfig->samplesPerFrame;
-    lifecycle_.networkStartAllowed = false;
-
-    const DeckLinuxAudioProbe probe = DeckLinuxAudioProbe::detect();
-    ready_ = probe.pipeWireHeadersLinked && audioConfiguration != 0 && opusConfig != nullptr && opusConfig->samplesPerFrame > 0;
-    return ready_ ? 0 : -1;
-}
-
-void DeckPipeWireAudio::start() {
-    const std::lock_guard<std::mutex> lock(lifecycleMutex_);
-    ++lifecycle_.startCalls;
-}
-
-void DeckPipeWireAudio::stop() {
-    const std::lock_guard<std::mutex> lock(lifecycleMutex_);
-    ++lifecycle_.stopCalls;
-}
-
-void DeckPipeWireAudio::cleanup() {
-    const std::lock_guard<std::mutex> lock(lifecycleMutex_);
-    ++lifecycle_.cleanupCalls;
-    ready_ = false;
-}
-
-void DeckPipeWireAudio::decodeAndPlaySample(char* sampleData, const int sampleLength) {
-    const std::lock_guard<std::mutex> lock(lifecycleMutex_);
-    if (!ready_ || sampleData == nullptr || sampleLength <= 0) {
-        return;
-    }
-    ++lifecycle_.sampleCalls;
-    lifecycle_.lastSampleLength = sampleLength;
-}
-
-DeckAudioLifecycle DeckPipeWireAudio::lifecycle() const {
-    const std::lock_guard<std::mutex> lock(lifecycleMutex_);
-    return lifecycle_;
-}
-
 DeckGuardedStreamSessionPreviewProducer::DeckGuardedStreamSessionPreviewProducer()
     : session_(renderer_, audio_, input_, *this) {}
 

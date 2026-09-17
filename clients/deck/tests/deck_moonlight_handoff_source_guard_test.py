@@ -40,6 +40,9 @@ def normalized_text(path: Path) -> str:
     if path.name == "CMakeLists.txt":
         # Target/file names necessarily contain the feature name. Keep command/runtime checks active.
         text = ALLOWED_CMAKE_PATTERN.sub("PRELIGHT_TARGET_NAME", text)
+        # Locating the executable for the isolated audio CTest does not probe
+        # devices or enable playback in the handoff/preflight surfaces.
+        text = text.replace("find_program(NOVA_DECK_TEST_PIPEWIRE pipewire)", "FIND_AUDIO_TEST_EXECUTABLE")
     if path.name == "main.cpp":
         # Qt signal wiring/event loop are not network connect/probe or process exec surfaces.
         text = text.replace("QObject::connect", "QT_SIGNAL_CONNECT")
