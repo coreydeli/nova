@@ -14,15 +14,24 @@ import com.papi.nova.manager.ConnectionResilienceManager
  */
 object PolarisNativeHook {
 
+    @Volatile
     private var resilienceManager: ConnectionResilienceManager? = null
 
+    @Synchronized
     fun register(manager: ConnectionResilienceManager) {
         resilienceManager = manager
         LimeLog.info("Nova: Native hook registered")
     }
 
-    fun unregister() {
-        resilienceManager = null
+    /**
+     * Clears the hook only while [manager] still owns it. An automatic reconnect starts the next
+     * Game before the old one is destroyed, and the old Game must not remove the new Game's hook.
+     */
+    @Synchronized
+    fun unregister(manager: ConnectionResilienceManager?) {
+        if (manager != null && resilienceManager === manager) {
+            resilienceManager = null
+        }
     }
 
     /**
