@@ -1100,7 +1100,7 @@ ApplicationWindow {
                                 Layout.preferredWidth: detailTextWidth
                                 Layout.minimumHeight: 48
                                 text: !handoffState.available ? "Copy safe launch plan"
-                                    : handoffState.running ? "End Moonlight stream"
+                                    : handoffState.running ? "End current session"
                                     : handoffState.armed ? "Confirm launch in Moonlight" : "Play in Moonlight"
                                 contentItem: Text {
                                     text: handoffActionButton.text
