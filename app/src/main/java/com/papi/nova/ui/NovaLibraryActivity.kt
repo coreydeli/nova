@@ -2968,7 +2968,9 @@ class NovaLibraryActivity : NovaActivity() {
                         CompositionLocalProvider(LocalBringIntoViewSpec provides focusScrollSpec) {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(viewportSpec.columns),
-                            modifier = Modifier.fillMaxSize(),
+                            // The last visible row fades out on the grid's own layer; nothing is
+                            // painted over the backdrop, so no box or seam appears where the grid ends.
+                            modifier = Modifier.fillMaxSize().novaLibraryGridBottomFade(NovaLibraryGridScrollFadeHeight),
                             contentPadding = PaddingValues(
                                 start = gridSidePaddingDp.dp,
                                 top = viewportSpec.topInsetDp.dp,
@@ -3005,23 +3007,6 @@ class NovaLibraryActivity : NovaActivity() {
                             }
                         }
                         }
-                        // The grid scrolls, so its last visible row is cut mid-artwork. A
-                        // short fade reads as there is more below instead of a severed edge.
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .height(NovaLibraryGridScrollFadeHeight)
-                                .background(
-                                    Brush.verticalGradient(
-                                        colorStops = arrayOf(
-                                            0.0f to androidx.compose.ui.graphics.Color.Transparent,
-                                            0.45f to LocalNovaComposeColors.current.window.copy(alpha = 0.62f),
-                                            1.0f to LocalNovaComposeColors.current.window.copy(alpha = 0.95f),
-                                        ),
-                                    ),
-                                ),
-                        )
                         }
                     }
                 }
@@ -4315,10 +4300,10 @@ class NovaLibraryActivity : NovaActivity() {
 
         /**
          * Height of the fade at the foot of the scrolling poster grid. It reads as
-         * more content below, and since the hint bar is drawn over the grid rather
-         * than on a slab of its own, it is also the ground those hints are read
-         * against. It has to clear the bar with room to ramp, or the wash ends in a
-         * line and the seam becomes the most visible edge on the screen.
+         * more content below. The grid fades its own pixels (novaLibraryGridBottomFade)
+         * instead of painting a wash: the shell stops the grid above the controller
+         * hints, so a painted wash ended in a line there and, with no panel framing the
+         * grid, read as a second background over the backdrop.
          */
         private val NovaLibraryGridScrollFadeHeight =
             (NovaLibraryUiStateMapper.controllerHintBarMinHeightDp() + 38).dp
