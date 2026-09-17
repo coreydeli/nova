@@ -25,6 +25,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QImage>
+#include <QKeyEvent>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -57,6 +58,10 @@ class QtDeckGamepadBridge final : public QObject {
 public:
     explicit QtDeckGamepadBridge(QObject* parent = nullptr)
         : QObject(parent) {
+        QObject::connect(&reconnectTimer_, &QTimer::timeout, this, [this]() {
+            if (!available()) openDefaultDevice();
+        });
+        reconnectTimer_.start(1000);
         openDefaultDevice();
     }
 
@@ -77,12 +82,25 @@ public:
 #endif
     }
 
+    Q_INVOKABLE void activateFocusedItem() {
+        sendNavigationKey(Qt::Key_Return);
+    }
+
 signals:
     void availabilityChanged();
     void primaryActionPressed(int activationCount);
     void secondaryActionPressed(int activationCount);
 
 private:
+    void sendNavigationKey(int key) {
+        QWindow* window = QGuiApplication::focusWindow();
+        if (!window || !window->isActive()) return;
+        QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &press);
+        QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &release);
+    }
+
     void openDefaultDevice() {
 #ifdef __linux__
         const QByteArray configuredDevice = qgetenv("NOVA_DECK_GAMEPAD_DEVICE");
@@ -92,8 +110,20 @@ private:
             return;
         }
 
+        unsigned char axes[ABS_CNT]{};
+        int horizontalAxis = -1;
+        int verticalAxis = -1;
+        unsigned char axisCount = 0;
+        if (::ioctl(gamepadFd_, JSIOCGAXES, &axisCount) == 0 &&
+            ::ioctl(gamepadFd_, JSIOCGAXMAP, axes) == 0) {
+            for (int i = 0; i < axisCount && i < ABS_CNT; ++i) {
+                if (axes[i] == ABS_HAT0X) horizontalAxis = i;
+                if (axes[i] == ABS_HAT0Y) verticalAxis = i;
+            }
+        }
+        navigation_ = nova::deck::DeckGamepadNavigation(horizontalAxis, verticalAxis);
         notifier_ = new QSocketNotifier(gamepadFd_, QSocketNotifier::Read, this);
-        connect(notifier_, &QSocketNotifier::activated, this, [this]() {
+        QObject::connect(notifier_, &QSocketNotifier::activated, this, [this]() {
             readPendingJoystickEvents();
         });
         emit availabilityChanged();
@@ -106,12 +136,25 @@ private:
         for (;;) {
             const ssize_t bytesRead = ::read(gamepadFd_, &rawEvent, sizeof(rawEvent));
             if (bytesRead == static_cast<ssize_t>(sizeof(rawEvent))) {
-                const auto action = nova::deck::decodeGamepadAction(nova::deck::DeckGamepadEvent{
+                const nova::deck::DeckGamepadEvent event{
                     .timeMs = rawEvent.time,
                     .value = rawEvent.value,
                     .type = rawEvent.type,
                     .number = rawEvent.number,
-                });
+                };
+                const auto direction = navigation_.decode(event);
+                // Keep draining while unfocused without acting on background input.
+                auto* window = QGuiApplication::focusWindow();
+                if (!window || !window->isActive()) continue;
+                using Action = nova::deck::DeckGamepadAction;
+                switch (direction) {
+                case Action::LeftPressed: sendNavigationKey(Qt::Key_Left); break;
+                case Action::RightPressed: sendNavigationKey(Qt::Key_Right); break;
+                case Action::UpPressed: sendNavigationKey(Qt::Key_Up); break;
+                case Action::DownPressed: sendNavigationKey(Qt::Key_Down); break;
+                default: break;
+                }
+                const auto action = nova::deck::decodeGamepadAction(event);
                 if (action == nova::deck::DeckGamepadAction::PrimaryPressed) {
                     ++primaryActivationCount_;
                     emit primaryActionPressed(primaryActivationCount_);
@@ -127,6 +170,8 @@ private:
             }
 
             notifier_->setEnabled(false);
+            notifier_->deleteLater();
+            notifier_ = nullptr;
             ::close(gamepadFd_);
             gamepadFd_ = -1;
             emit availabilityChanged();
@@ -139,6 +184,8 @@ private:
 #else
     void readPendingJoystickEvents() {}
 #endif
+    QTimer reconnectTimer_;
+    nova::deck::DeckGamepadNavigation navigation_;
     int primaryActivationCount_ = 0;
     int secondaryActivationCount_ = 0;
 };

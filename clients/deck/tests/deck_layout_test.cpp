@@ -272,8 +272,8 @@ int main() {
     assert(mainQml.find("1 · Pick host") != std::string::npos);
     assert(mainQml.find("2 · Pick game") != std::string::npos);
     assert(mainQml.find("3 · Review launch plan") != std::string::npos);
-    assert(mainQml.find("Selected game · A copies preview") != std::string::npos);
-    assert(mainQml.find("A = Copy safe launch plan") != std::string::npos);
+    assert(mainQml.find("FOCUSED · Right to review") != std::string::npos);
+    assert(mainQml.find("Copy safe launch plan") != std::string::npos);
     assert(mainQml.find("Blocked safely: lab gate keeps backend power and streams off.") != std::string::npos);
     assert(mainQml.find("Diagnostics explain why; they never start discovery, backend power, or media.") != std::string::npos);
     assert(mainQml.find("readonly property string deckProductStateGate: \"deck-product-state-matrix-v1\"") != std::string::npos);

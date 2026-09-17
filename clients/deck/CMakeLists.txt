@@ -100,6 +100,9 @@ if(BUILD_TESTING)
             NOVA_DECK_MAIN_QML_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
     )
     add_test(NAME nova_deck_controller_library_smoke COMMAND nova_deck_layout_test)
+    add_executable(nova_deck_gamepad_test tests/deck_gamepad_test.cpp)
+    target_link_libraries(nova_deck_gamepad_test PRIVATE nova_deck_core)
+    add_test(NAME nova_deck_gamepad_test COMMAND nova_deck_gamepad_test)
     add_executable(nova_deck_stream_core_test
         tests/deck_stream_core_test.cpp
     )
