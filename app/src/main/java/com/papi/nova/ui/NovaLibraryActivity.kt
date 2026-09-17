@@ -229,6 +229,8 @@ class NovaLibraryActivity : NovaActivity() {
     private var choosingSpace by mutableStateOf(false)
     private var spacesEpoch = 0
     private var spacesPoll: Job? = null
+    private var libraryPollEpoch = 0
+    private var libraryPoll: Job? = null
     // The blocking host calls behind an open run here, off the lifecycle scope, so the
     // screen can stop waiting for them at a deadline instead of for as long as OkHttp does.
     private val spacesIo = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -451,6 +453,7 @@ class NovaLibraryActivity : NovaActivity() {
         startSpacesPolling()
         if (NovaSpaceRetrySignal.consume(this, streamPcUuid, streamHost)) retrySpaceOpenWhenChecked()
         if (recreateForThemeChangeIfNeeded()) return
+        startLibraryPolling()
         revealControllerHints(NovaControllerHintChromeEvent.EXPLICIT_REVEAL)
         if (
             ::apiClient.isInitialized &&
@@ -463,6 +466,7 @@ class NovaLibraryActivity : NovaActivity() {
     override fun onPause() {
         cancelPendingSpaceOpen()
         spacesEpoch++; spacesPoll?.cancel(); spacesPoll = null
+        libraryPollEpoch++; libraryPoll?.cancel(); libraryPoll = null
         super.onPause()
     }
 
@@ -473,6 +477,72 @@ class NovaLibraryActivity : NovaActivity() {
         spaceOpenJob?.cancel()
         spaceOpenJob = null
         spaceOpenPending = false
+    }
+
+    /**
+     * Re-reads the host's library while it is on screen, at the pace [NovaLibraryLiveRefresh]
+     * sets, so a change made on the host shows without pull-to-refresh. Leaving the library
+     * stops it; coming back reads at once.
+     */
+    private fun startLibraryPolling() {
+        libraryPoll?.cancel()
+        if (!::apiClient.isInitialized || !::artworkLibraryUpdateViewModel.isInitialized) return
+        val epoch = ++libraryPollEpoch
+        libraryPoll = lifecycleScope.launch {
+            var failures = 0
+            var first = true
+            while (isActive) {
+                delay(NovaLibraryLiveRefresh.delayBeforeRead(first, failures))
+                first = false
+                if (epoch != libraryPollEpoch) return@launch
+                if (!NovaLibraryLiveRefresh.mayRead(isInitialLoading, isRefreshing, choosingSpace || spaceOpenPending)) continue
+                failures = if (readLibraryQuietly(epoch, failures)) 0 else failures + 1
+            }
+        }
+    }
+
+    /**
+     * One background read, published through the same refresh token a pull-to-refresh uses, so
+     * artwork committed from Artwork Studio meanwhile is kept and a newer load wins. It never
+     * clears decoded covers and changes the screen only when the library differs. A read that
+     * succeeds after a failed load also clears that failure and fetches the settings it missed.
+     * @return whether the host answered.
+     */
+    private suspend fun readLibraryQuietly(epoch: Int, failures: Int): Boolean {
+        val token = artworkLibraryUpdateViewModel.beginRefresh()
+        val settingsMissing = clientSettings == null
+        val (games, settings) = try {
+            withContext(Dispatchers.IO) {
+                val games = apiClient.getAllGames()
+                val settings = if (!settingsMissing) null else try {
+                    apiClient.getClientSettings()
+                } catch (e: Exception) {
+                    LimeLog.warning("Nova: Failed to load client settings: ${e.message}")
+                    null
+                }
+                games to settings
+            }
+        } catch (e: CancellationException) {
+            artworkLibraryUpdateViewModel.discardRefresh(token)
+            throw e
+        } catch (e: Exception) {
+            artworkLibraryUpdateViewModel.discardRefresh(token)
+            if (failures == 0) LimeLog.warning("Nova: Background library read failed: ${e.message}")
+            return false
+        }
+        // A load that started while this read was out owns the library.
+        if (epoch != libraryPollEpoch ||
+            !NovaLibraryLiveRefresh.mayRead(isInitialLoading, isRefreshing, choosingSpace || spaceOpenPending)
+        ) {
+            artworkLibraryUpdateViewModel.discardRefresh(token)
+            return true
+        }
+        artworkLibraryUpdateViewModel.publishRefresh(token, games) { read ->
+            NovaLibraryLiveRefresh.changedLibrary(allGames, read)?.let { allGames = it }
+            if (loadErrorMessage != null) loadErrorMessage = null
+            if (settings != null) clientSettings = settings
+        }
+        return true
     }
 
     /**
