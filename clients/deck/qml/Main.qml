@@ -19,7 +19,7 @@ ApplicationWindow {
     readonly property int hostColumnWidth: 336
     readonly property int sampleCardWidth: 392
     readonly property int detailColumnWidth: 424
-    readonly property int hostCardHeight: 104
+    readonly property int hostCardHeight: 112
     readonly property int detailPanelHeight: 184
     readonly property int launchPreviewHeight: 344
     readonly property int expandedDiagnosticsLaneHeight: 132
@@ -56,6 +56,43 @@ ApplicationWindow {
     property var backendDiagnosticsPreview: novaBackendPreview.lastDiagnosticsPreview
     property bool diagnosticsExpanded: false
     property bool expandedDiagnosticsLaneScrolledToDetails: false
+
+    // Bound content height to the screen while each column scrolls independently.
+    component ScrollableColumn: ScrollView {
+        id: columnView
+        default property alias columnData: contentColumn.data
+        Layout.fillHeight: true
+        Layout.minimumHeight: 0
+        contentWidth: width
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+        ColumnLayout {
+            id: contentColumn
+            width: columnView.availableWidth
+            spacing: columnView.spacing
+        }
+    }
+
+    function keepFocusedItemVisible() {
+        const item = activeFocusItem
+        if (!item) return
+        for (const viewport of [hostViewport, libraryGameList, detailViewport]) {
+            let ancestor = item.parent
+            while (ancestor && ancestor !== viewport) ancestor = ancestor.parent
+            if (ancestor !== viewport) continue
+            const flickable = viewport.contentItem
+            const top = item.mapToItem(flickable.contentItem, 0, 0).y
+            const bottom = top + item.height
+            let target = flickable.contentY
+            if (top < target) target = top
+            else if (bottom > target + flickable.height) target = bottom - flickable.height
+            flickable.contentY = Math.max(0, Math.min(target,
+                Math.max(0, flickable.contentHeight - flickable.height)))
+        }
+    }
+
+    onActiveFocusItemChanged: Qt.callLater(keepFocusedItemVisible)
 
     function selectedHostSubtitle(hostModel) {
         if (hostModel && hostModel.subtitle) {
@@ -143,6 +180,32 @@ ApplicationWindow {
             "installedLabel": gameModel.installedLabel
         }
         refreshLaunchPreviewBinding()
+    }
+
+    function focusSelectedHost() {
+        for (let i = 0; i < hostRepeater.count; ++i) {
+            const item = hostRepeater.itemAt(i)
+            if (item && selectedHostForPreview && item.objectName === selectedHostForPreview.id) {
+                item.forceActiveFocus()
+                return
+            }
+        }
+        const firstHost = hostRepeater.itemAt(0)
+        if (firstHost) firstHost.forceActiveFocus()
+        else emptyHostState.forceActiveFocus()
+    }
+
+    function focusSelectedGame() {
+        for (let i = 0; i < libraryGameRepeater.count; ++i) {
+            const item = libraryGameRepeater.itemAt(i)
+            if (item && selectedGameForPreview && item.objectName === selectedGameForPreview.id) {
+                item.forceActiveFocus()
+                return
+            }
+        }
+        const firstGame = libraryGameRepeater.itemAt(0)
+        if (firstGame) firstGame.forceActiveFocus()
+        else emptyGameState.forceActiveFocus()
     }
 
     function focusSelectedLibraryItem() {
@@ -455,7 +518,7 @@ ApplicationWindow {
     Connections {
         target: novaGamepad
         function onPrimaryActionPressed(activationCount) {
-            activateLaunchCardFromController()
+            novaGamepad.activateFocusedItem()
         }
         function onSecondaryActionPressed(activationCount) {
             cancelHandoffFromController()
@@ -556,9 +619,13 @@ ApplicationWindow {
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 0
                 spacing: deckRowSpacing
 
-                ColumnLayout {
+                ScrollableColumn {
+                    id: hostViewport
+                    objectName: "host-viewport"
                     Layout.preferredWidth: hostColumnWidth
                     spacing: deckPanelSpacing
 
@@ -590,7 +657,7 @@ ApplicationWindow {
                         focus: visible
                         activeFocusOnTab: visible
                         KeyNavigation.right: hostDetailPanel
-                        Keys.onRightPressed: hostDetailPanel.forceActiveFocus()
+                        Keys.onRightPressed: focusSelectedGame()
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -631,9 +698,12 @@ ApplicationWindow {
                             activeFocusOnTab: true
                             KeyNavigation.right: hostDetailPanel
                             onActiveFocusChanged: if (activeFocus) selectHostForPreview(modelData)
+                            TapHandler {
+                                onTapped: parent.forceActiveFocus()
+                            }
                             Keys.onRightPressed: {
                                 selectHostForPreview(modelData)
-                                hostDetailPanel.forceActiveFocus()
+                                focusSelectedGame()
                             }
                             Keys.onReturnPressed: selectHostForPreview(modelData)
                             Keys.onEnterPressed: selectHostForPreview(modelData)
@@ -657,14 +727,18 @@ ApplicationWindow {
                                 spacing: 5
 
                                 Label {
+                                    Layout.fillWidth: true
                                     text: modelData.displayName
+                                    elide: Text.ElideRight
                                     color: "#E9ECFF"
                                     font.pixelSize: 20
                                     font.bold: true
                                 }
 
                                 Label {
+                                    Layout.fillWidth: true
                                     text: modelData.statusLabel
+                                    elide: Text.ElideRight
                                     color: "#B8C2F0"
                                     font.pixelSize: 16
                                 }
@@ -681,7 +755,7 @@ ApplicationWindow {
                     }
                 }
 
-                ColumnLayout {
+                ScrollableColumn {
                     id: libraryGameList
                     objectName: "library-game-list"
                     Layout.preferredWidth: sampleCardWidth
@@ -716,7 +790,7 @@ ApplicationWindow {
                         activeFocusOnTab: visible
                         KeyNavigation.left: novaLibraryHosts.length > 0 ? hostRepeater.itemAt(0) : emptyHostState
                         KeyNavigation.right: hostDetailPanel
-                        Keys.onLeftPressed: focusSelectedLibraryItem()
+                        Keys.onLeftPressed: focusSelectedHost()
                         Keys.onRightPressed: hostDetailPanel.forceActiveFocus()
 
                         ColumnLayout {
@@ -751,7 +825,7 @@ ApplicationWindow {
 
                             objectName: modelData.id
                             Layout.preferredWidth: sampleCardWidth
-                            Layout.preferredHeight: 112
+                            Layout.preferredHeight: 128
                             radius: 18
                             color: selectedGameForPreview.id === modelData.id ? "#202B55" : "#151D39"
                             border.color: activeFocus ? focusRingColor : selectedGameForPreview.id === modelData.id ? "#8AFFC1" : "#7C73FF"
@@ -760,6 +834,9 @@ ApplicationWindow {
                             activeFocusOnTab: true
                             KeyNavigation.right: hostDetailPanel
                             onActiveFocusChanged: if (activeFocus) selectGameForPreview(modelData)
+                            TapHandler {
+                                onTapped: parent.forceActiveFocus()
+                            }
                             Keys.onRightPressed: {
                                 selectGameForPreview(modelData)
                                 hostDetailPanel.forceActiveFocus()
@@ -779,7 +856,7 @@ ApplicationWindow {
                                     previous.forceActiveFocus()
                                 }
                             }
-                            Keys.onLeftPressed: focusSelectedLibraryItem()
+                            Keys.onLeftPressed: focusSelectedHost()
 
                             ColumnLayout {
                                 anchors.fill: parent
@@ -792,27 +869,33 @@ ApplicationWindow {
                                 }
 
                                 Label {
+                                    Layout.fillWidth: true
                                     text: modelData.title
+                                    elide: Text.ElideRight
                                     color: "#E9ECFF"
                                     font.pixelSize: 26
                                     font.bold: true
                                 }
 
                                 Label {
+                                    Layout.fillWidth: true
                                     text: modelData.sourceRuntimeLabel + " · " + modelData.installedLabel
+                                    elide: Text.ElideRight
                                     color: "#B8C2F0"
                                     font.pixelSize: 13
                                 }
 
                                 Label {
+                                    Layout.fillWidth: true
                                     text: modelData.launchModeLabel
+                                    elide: Text.ElideRight
                                     color: "#A8B0D8"
                                     font.pixelSize: 14
                                 }
 
                                 Label {
                                     visible: selectedGameForPreview.id === modelData.id
-                                    text: "Selected game · A copies preview"
+                                    text: "Selected game · Right to review"
                                     color: "#8AFFC1"
                                     font.pixelSize: 13
                                     font.bold: true
@@ -822,7 +905,9 @@ ApplicationWindow {
                     }
                 }
 
-                ColumnLayout {
+                ScrollableColumn {
+                    id: detailViewport
+                    objectName: "detail-viewport"
                     Layout.preferredWidth: detailColumnWidth
                     spacing: deckPanelSpacing
 
@@ -856,14 +941,18 @@ ApplicationWindow {
                             }
 
                             Label {
+                                Layout.fillWidth: true
                                 text: selectedHostForPreview.displayName
+                                elide: Text.ElideRight
                                 color: "#E9ECFF"
                                 font.pixelSize: 30
                                 font.bold: true
                             }
 
                             Label {
+                                Layout.fillWidth: true
                                 text: selectedHostForPreview.statusLabel
+                                elide: Text.ElideRight
                                 color: "#B8C2F0"
                                 font.pixelSize: 19
                             }
@@ -975,14 +1064,19 @@ ApplicationWindow {
                                 visible: !diagnosticsExpanded
                             }
 
-                            Label {
+                            Button {
+                                id: handoffActionButton
+                                objectName: "handoff-primary-action"
                                 Layout.preferredWidth: detailTextWidth
-                                text: handoffState.actionHint ? handoffState.actionHint : "A = Copy safe launch plan · no stream power enabled"
-                                color: "#8AFFC1"
-                                font.pixelSize: 12
-                                font.bold: true
-                                wrapMode: Text.WordWrap
+                                Layout.minimumHeight: 48
+                                text: handoffState.actionHint ? handoffState.actionHint.replace("A = ", "") : "Copy safe launch plan"
                                 visible: !diagnosticsExpanded
+                                onClicked: activateLaunchCardFromController()
+                                Keys.onReturnPressed: (event) => { if (!event.isAutoRepeat) activateLaunchCardFromController() }
+                                Keys.onEnterPressed: (event) => { if (!event.isAutoRepeat) activateLaunchCardFromController() }
+                                Keys.onLeftPressed: focusSelectedLibraryItem()
+                                Keys.onUpPressed: hostDetailPanel.forceActiveFocus()
+                                Keys.onDownPressed: secondaryDiagnosticsToggle.forceActiveFocus()
                             }
 
                             Label {
@@ -1638,11 +1732,9 @@ ApplicationWindow {
                 }
             }
 
-            Item { Layout.fillHeight: true }
-
             Label {
                 text: novaDeckFullscreenPreferred
-                    ? "D-pad Navigate · A Copy preview · 1280×800 Deck-first"
+                    ? "D-pad Navigate · A Confirm · Touch to select"
                     : "Deck default: 1280×800 · windowed test mode"
                 color: "#7C88B8"
                 font.pixelSize: 18
