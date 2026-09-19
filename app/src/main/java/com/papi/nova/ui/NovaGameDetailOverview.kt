@@ -2,7 +2,6 @@ package com.papi.nova.ui
 
 import android.widget.ImageView
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Size
@@ -93,6 +94,9 @@ internal enum class NovaGameDetailDestination { OVERVIEW, PLAY_SETUP, ARTWORK }
 
 /** Content insets shared by the Overview and the destinations that sit beside it. */
 internal val NovaGameDetailInset = 28.dp
+
+/** Below this the landscape actions no longer fit one row and take two. */
+private val NOVA_GAME_DETAIL_ONE_ROW_MIN_WIDTH = 600.dp
 internal val NovaGameDetailFloor = 58.dp
 
 /** Every focusable control clears the accessible target floor. */
@@ -227,6 +231,13 @@ internal fun NovaGameDetailOverview(
                 playTime = uiState.game.playTime,
                 beatTime = uiState.game.beatTime,
                 onCorrectMatch = { onDestination(NovaGameDetailDestination.ARTWORK) },
+                // Launch takes focus only when it can act; otherwise Down keeps the
+                // ordinary search rather than aiming at a button that cannot hold focus.
+                exitDown = if (uiState.playEnabled || activeSession != null) {
+                    playFocusRequester
+                } else {
+                    FocusRequester.Default
+                },
             )
 
             if (game.space == null) NovaGameDetailStatusLine(
@@ -561,18 +572,48 @@ private fun NovaGameDetailActions(
             }
         }
     } else {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier,
-        ) {
-            primaryAction(Modifier)
-            if (showEnd) endAction(Modifier)
-            if (showRetry) retryAction(Modifier)
-            if (!reviewExpanded) playSetupAction(Modifier)
-            if (supportsHostCustomization) resetAction(Modifier)
-            if (pinVisible) pinAction(Modifier)
-            if (!reviewExpanded && supportsHostCustomization) artworkAction(Modifier)
+        val showArtwork = !reviewExpanded && supportsHostCustomization
+        val showSetupRow = showEnd || showRetry || !reviewExpanded || supportsHostCustomization
+        BoxWithConstraints(modifier = modifier.testTag("nova-game-detail-actions")) {
+            if (maxWidth < NOVA_GAME_DETAIL_ONE_ROW_MIN_WIDTH) {
+                // A 4:3 handheld such as the Retroid Pocket Nova leaves about 520dp here, too
+                // little for one row: Artwork sat clipped past the right edge, and letting the
+                // row wrap stranded it alone on a second line. Launch keeps the two quick icons
+                // beside it, and the setup actions take the row below.
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        primaryAction(Modifier)
+                        if (pinVisible) pinAction(Modifier)
+                        if (showArtwork) artworkAction(Modifier)
+                    }
+                    if (showSetupRow) FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (showEnd) endAction(Modifier)
+                        if (showRetry) retryAction(Modifier)
+                        if (!reviewExpanded) playSetupAction(Modifier)
+                        if (supportsHostCustomization) resetAction(Modifier)
+                    }
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    primaryAction(Modifier)
+                    if (showEnd) endAction(Modifier)
+                    if (showRetry) retryAction(Modifier)
+                    if (!reviewExpanded) playSetupAction(Modifier)
+                    if (supportsHostCustomization) resetAction(Modifier)
+                    if (pinVisible) pinAction(Modifier)
+                    if (showArtwork) artworkAction(Modifier)
+                }
+            }
         }
     }
 }
@@ -601,8 +642,14 @@ private fun NovaGameDetailBeatGauge(
     playTime: PolarisGame.PlayTime?,
     beatTime: PolarisGame.BeatTime?,
     onCorrectMatch: () -> Unit,
+    exitDown: FocusRequester,
 ) {
     val colors = LocalNovaComposeColors.current
+    // A fuzzy match that went wrong looks exactly like one that went right, so the
+    // name it actually found is shown whenever it is not plainly the same game.
+    val matched = beatTime?.matchedName.orEmpty()
+    val showCorrection = matched.isNotBlank() && novaSameTitle(matched, gameName).not()
+    val correctionFocus = remember { FocusRequester() }
     val surfaces = LocalNovaLibrarySurfaces.current
     val uriHandler = LocalUriHandler.current
 
@@ -672,10 +719,14 @@ private fun NovaGameDetailBeatGauge(
                             // A page makes this a control; without one it is a readout and
                             // has no business in the focus lane.
                             if (linked) {
+                                // The chip sits at the right end of the gauge, so the default
+                                // search sent Down to whatever was under it, Play Setup in
+                                // landscape, and Up from there came straight back: Launch was
+                                // unreachable with a D-pad. Down goes where the eye reads next.
                                 Modifier
+                                    .focusProperties { down = if (showCorrection) correctionFocus else exitDown }
                                     .onFocusChanged { estimateFocused = it.isFocused || it.hasFocus }
                                     .clickable(role = Role.Button) { uriHandler.openUri(page) }
-                                    .focusable()
                             } else {
                                 Modifier
                             }
@@ -757,10 +808,7 @@ private fun NovaGameDetailBeatGauge(
             }
         }
 
-        // A fuzzy match that went wrong looks exactly like one that went right, so the
-        // name it actually found is shown whenever it is not plainly the same game.
-        val matched = beatTime?.matchedName.orEmpty()
-        if (matched.isNotBlank() && novaSameTitle(matched, gameName).not()) {
+        if (showCorrection) {
             var correctionFocused by remember { mutableStateOf(false) }
             Text(
                 text = stringResource(R.string.nova_game_detail_matched_as, matched),
@@ -773,9 +821,10 @@ private fun NovaGameDetailBeatGauge(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .padding(top = 5.dp)
+                    .focusRequester(correctionFocus)
+                    .focusProperties { down = exitDown }
                     .onFocusChanged { correctionFocused = it.isFocused || it.hasFocus }
                     .clickable(role = Role.Button, onClick = onCorrectMatch)
-                    .focusable()
                     .width(NOVA_GAUGE_WIDTH),
             )
         }

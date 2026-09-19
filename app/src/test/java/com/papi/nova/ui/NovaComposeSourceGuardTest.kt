@@ -3377,6 +3377,46 @@ class NovaComposeSourceGuardTest {
     }
 
     @Test
+    fun gameDetailLandscapeActionsFitA43Handheld() {
+        val actions = readNovaGameDetail().section("private fun NovaGameDetailActions(", "/**\n * How long this has been played")
+        // The landscape branch is the one whose else sits at the function body indent.
+        val landscape = actions.substringAfter("\n    } else {\n")
+        val narrow = landscape
+            .substringAfter("if (maxWidth < NOVA_GAME_DETAIL_ONE_ROW_MIN_WIDTH) {")
+            .substringBefore("\n            } else {\n")
+        val artwork = narrow.indexOf("artworkAction(")
+        val setup = narrow.indexOf("playSetupAction(")
+        assertTrue(
+            "on the 4:3 Retroid Pocket Nova one row clipped Artwork past the right edge, and wrapping " +
+                "left it alone on a second line; narrow screens keep the quick icons beside Launch and " +
+                "move the setup actions to the row below",
+            narrow.indexOf("primaryAction(") in 0 until artwork && artwork < setup,
+        )
+    }
+
+    @Test
+    fun gameDetailGaugeHandsDownToLaunchNotWhateverSitsUnderIt() {
+        val detail = readNovaGameDetail()
+        val gauge = detail.section("private fun NovaGameDetailBeatGauge(", "/**\n * Whether two titles are the same game")
+        assertTrue(
+            "the estimate chip sits right of Launch, so the default search sent Down to Play Setup " +
+                "and Up came back; Down must name the next control",
+            gauge.contains("down = if (showCorrection) correctionFocus else exitDown") &&
+                gauge.contains(".focusProperties { down = exitDown }"),
+        )
+        assertFalse(
+            "clickable already makes the control a focus target; a nested .focusable() is a second " +
+                "target the Down redirect does not cover",
+            gauge.contains(".focusable()"),
+        )
+        assertTrue(
+            "a Launch that cannot act holds no focus, so Down falls back to the ordinary search " +
+                "instead of dead-ending",
+            detail.contains("FocusRequester.Default"),
+        )
+    }
+
+    @Test
     fun gameDetailGaugeSurfacesAWrongMatchAndLeadsToItsFix() {
         val detail = readNovaGameDetail()
         val gauge = detail.section(

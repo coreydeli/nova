@@ -97,6 +97,7 @@ import com.papi.nova.ui.NovaSnackbar
 import com.papi.nova.ui.NovaThemeManager
 import com.papi.nova.ui.NovaWelcomeActivity
 import com.papi.nova.ui.SpaceParticleView
+import com.papi.nova.ui.NovaDialogWindows
 import com.papi.nova.utils.Dialog
 import com.papi.nova.utils.HelpLauncher
 import com.papi.nova.utils.ServerHelper
@@ -349,7 +350,14 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
     private fun initializeViews(prefs: PreferenceConfiguration) {
         setContentView(R.layout.activity_pc_view)
 
-        UiHelper.notifyNewRootView(this)
+        // The particle field and the background run under the system bars; only the
+        // dashboard's controls are kept clear of them.
+        UiHelper.notifyNewRootView(
+            this,
+            findViewById<View>(R.id.dashboardCockpit)
+                ?: findViewById<View>(R.id.dashboardContent)
+                ?: findViewById<View>(android.R.id.content),
+        )
 
         val header = findViewById<View>(R.id.pcViewHeader)
         if (header != null) {
@@ -2415,6 +2423,7 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
                 .setNegativeButton(getString(R.string.cancel)) { dialog, _ -> dialog.dismiss() }
                 .create()
         dialog.show()
+        dialog.window?.let { NovaDialogWindows.adopt(dialog.context, it) }
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val pin = otpInput.text.toString()

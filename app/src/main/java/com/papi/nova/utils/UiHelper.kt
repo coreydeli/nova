@@ -23,7 +23,11 @@ import com.papi.nova.LimeLog
 import com.papi.nova.R
 import com.papi.nova.nvstream.http.ComputerDetails
 import com.papi.nova.preferences.PreferenceConfiguration
+import com.papi.nova.ui.NovaDialogWindows
+import com.papi.nova.ui.NovaSystemBars
 import java.util.Locale
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 object UiHelper {
     private const val TV_VERTICAL_PADDING_DP = 15
@@ -154,8 +158,17 @@ object UiHelper {
         }
     }
 
+    /**
+     * Sets up a legacy screen's root view. [insetTarget] is the view padded clear of
+     * the system bars; a screen whose background should run under them passes its
+     * content layout, so only the controls move.
+     */
     @JvmStatic
-    fun notifyNewRootView(activity: Activity) {
+    @JvmOverloads
+    fun notifyNewRootView(
+        activity: Activity,
+        insetTarget: View = activity.findViewById(android.R.id.content),
+    ) {
         val rootView = activity.findViewById<View>(android.R.id.content)
         val modeMgr = activity.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
 
@@ -178,7 +191,7 @@ object UiHelper {
                 verticalPaddingPixels,
             )
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            activity.findViewById<View>(android.R.id.content).setOnApplyWindowInsetsListener {
+            insetTarget.setOnApplyWindowInsetsListener {
                     view: View,
                     windowInsets: WindowInsets,
                 ->
@@ -201,7 +214,34 @@ object UiHelper {
 
             activity.window.decorView.systemUiVisibility =
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            // Assigning the flags clears the ones Hide System Bars set, so take it again.
+            if (NovaSystemBars.isManaged(activity)) NovaSystemBars.apply(activity)
+        } else {
+            // Below Android 10 nothing padded this content, and the surface-colored bars
+            // hid what sat under them. The bars are transparent now, so keep it clear.
+            padForSystemBars(insetTarget)
         }
+    }
+
+    /**
+     * Pads a plain content view clear of the status and navigation bars and any
+     * cutout. Nova draws behind the bars on every API level, so a screen without its
+     * own inset handling would otherwise put its first line under the clock.
+     */
+    @JvmStatic
+    fun padContentForSystemBars(activity: Activity) {
+        padForSystemBars(activity.findViewById(android.R.id.content) ?: return)
+    }
+
+    /** Pads [target] clear of the status and navigation bars and any cutout. */
+    @JvmStatic
+    fun padForSystemBars(target: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(target) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(target)
     }
 
     /**
@@ -294,6 +334,7 @@ object UiHelper {
         }
         val dialog = builder.create()
         dialog.show()
+        dialog.window?.let { NovaDialogWindows.adopt(dialog.context, it) }
         dialog.findViewById<TextView>(android.R.id.message)
             ?.movementMethod = LinkMovementMethod.getInstance()
     }
