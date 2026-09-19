@@ -489,6 +489,9 @@ class NovaQuickMenu(private val game: Game) : Game.GameMenuCallbacks {
                 perfOverlayEnabled = game.prefConfig.enablePerfOverlay,
                 onscreenControllerEnabled = game.prefConfig.onscreenController,
                 keyboardVisible = game.isKeyboardLayoutVisible,
+                players = game.currentPlayers(),
+                waitingGamepads = game.waitingGamepads(),
+                multiController = game.prefConfig.multiController,
                 mouseModeLabel = game.currentMouseModeLabel ?: "",
                 allowChangeMouseMode = game.allowChangeMouseMode,
                 isOnExternalDisplay = game.isOnExternalDisplay,
@@ -1050,6 +1053,20 @@ class NovaQuickMenu(private val game: Game) : Game.GameMenuCallbacks {
                         NovaQuickMenuActionId.KEYBOARD -> {
                             dismiss()
                             game.toggleFullKeyboard()
+                        }
+                        NovaQuickMenuActionId.PLAYERS -> {
+                            // The menu takes every pad's buttons while it is open, so nobody
+                            // could join; it closes and says what to do instead.
+                            dismiss()
+                            game.reassignPlayers()
+                            // Shown after the menu is gone: its view is detached by then, so
+                            // the snackbar lands on the stream instead of leaving with the menu.
+                            NovaSnackbar.show(
+                                game,
+                                game.getString(R.string.nova_quick_menu_players_reassigned),
+                                com.google.android.material.snackbar.Snackbar.LENGTH_LONG,
+                                anchor = composeView
+                            )
                         }
                         else -> Unit
                     }

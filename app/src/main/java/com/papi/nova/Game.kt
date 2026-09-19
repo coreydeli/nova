@@ -817,6 +817,8 @@ getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)
 
  // Inflate the content
         setContentView(R.layout.activity_game)
+        // The stream is full screen, and so are the sheets and dialogs it opens.
+        com.papi.nova.ui.NovaSystemBars.markStream(this)
 
 clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
@@ -6846,6 +6848,15 @@ touchContextMap[i] = TrackpadContext(conn!!, i)
         isZoomModeEnabled = false
 updateZoomButtonAppearance()
 }
+/** Who is which player now, for the Command Center. */
+fun currentPlayers(): List<com.papi.nova.binding.input.NovaPlayerSlot> = controllerHandler?.players().orEmpty()
+
+fun waitingGamepads(): List<String> = controllerHandler?.waitingGamepads().orEmpty()
+
+fun reassignPlayers() {
+controllerHandler?.reassignPlayers()
+}
+
 fun isNovaHudShowing():Boolean {
 return novaHud?.isShowing == true
 }
