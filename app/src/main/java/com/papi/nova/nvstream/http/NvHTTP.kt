@@ -255,6 +255,9 @@ class NvHTTP @Throws(IOException::class) constructor(
         details.currentGameOwnedByClient = getCurrentGameOwned(serverInfo)
         details.currentGameOwnerName = getCurrentGameOwner(serverInfo)
         details.currentGameViewerCount = getCurrentGameViewerCount(serverInfo)
+        details.currentGameWatchable = parseCurrentGameWatchable(serverInfo)
+        details.currentGameOwnerDeviceName = parseCurrentGameOwnerDeviceName(serverInfo)
+        details.currentGameWatchProfile = parseCurrentGameWatchProfile(serverInfo)
         details.serverMaxLaunchRefreshRate = getServerMaxLaunchRefreshRate(serverInfo)
         details.nvidiaServer = getXmlString(serverInfo, "state", true)!!.contains("MJOLNIR")
         details.state = ComputerDetails.State.ONLINE
@@ -582,9 +585,37 @@ class NvHTTP @Throws(IOException::class) constructor(
         )
     }
 
+    /**
+     * Clears a half-finished pairing session. This goes over plain HTTP, where a host has no
+     * proof of who is asking, so it never revokes a paired client. [forgetThisDevice] does that.
+     */
     @Throws(IOException::class)
     fun unpair() {
         openHttpConnectionToString(httpClientLongConnectTimeout, baseUrlHttp, "unpair")
+    }
+
+    /**
+     * Asks the host to take this device off its list of paired clients.
+     *
+     * A host only does that for a request that arrives over HTTPS with the client's own
+     * certificate, which is the proof that the caller is the device being removed. Without this
+     * call a PC deleted here stays paired over there, and pairing it again adds a second entry.
+     * Never throws: removing a PC must not depend on the PC being awake.
+     */
+    fun forgetThisDevice(): HostForgetResult {
+        val response = try {
+            openHttpConnectionToString(httpClientShortConnectTimeout, getHttpsUrl(false), "unpair")
+        } catch (e: FileNotFoundException) {
+            return HostForgetResult.UNSUPPORTED
+        } catch (e: HostHttpResponseException) {
+            return HostForgetResult.REFUSED
+        } catch (e: IOException) {
+            return HostForgetResult.UNREACHABLE
+        } catch (e: RuntimeException) {
+            // A port that does not parse or a TLS setup that throws: the host was not told.
+            return HostForgetResult.UNREACHABLE
+        }
+        return parseForgetResponse(response)
     }
 
     @Throws(IOException::class)
@@ -854,6 +885,25 @@ class NvHTTP @Throws(IOException::class) constructor(
             return trimmedHost
         }
 
+        /**
+         * Reads a host's answer to an HTTPS unpair. Only a well-formed answer that says this
+         * device is no longer paired counts; anything else leaves the claim unmade.
+         */
+        @JvmStatic
+        fun parseForgetResponse(response: String): HostForgetResult {
+            return try {
+                if (getXmlString(response, "paired", true) == "0") {
+                    HostForgetResult.FORGOTTEN
+                } else {
+                    HostForgetResult.REFUSED
+                }
+            } catch (e: XmlPullParserException) {
+                HostForgetResult.REFUSED
+            } catch (e: IOException) {
+                HostForgetResult.REFUSED
+            }
+        }
+
         private fun isKnownNvHttpPath(path: String?): Boolean {
             return when (path) {
                 "actions/clipboard",
@@ -990,7 +1040,16 @@ class NvHTTP @Throws(IOException::class) constructor(
                 // Polaris says why it refused, as attributes Moonlight ignores.
                 val hostCode = xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "error_code")?.trim()?.takeIf { it.isNotEmpty() }
                 val hostAction = xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "error_action")?.trim()?.takeIf { it.isNotEmpty() }
-                throw HostHttpResponseException(statusCode, statusMsg, hostCode, hostAction)
+                // And, for a refused watcher, the mode to ask for instead. Attributes, because this
+                // throws at the root tag, before any element under it has been read.
+                val watchProfile = com.papi.nova.nvstream.NovaWatchProfile.fromFields(
+                    xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "watch_width"),
+                    xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "watch_height"),
+                    xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "watch_fps_x1000"),
+                    xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "watch_bit_depth"),
+                    xpp.getAttributeValue(XmlPullParser.NO_NAMESPACE, "watch_codec"),
+                )
+                throw HostHttpResponseException(statusCode, statusMsg, hostCode, hostAction, watchProfile)
             }
         }
 
@@ -1023,6 +1082,36 @@ class NvHTTP @Throws(IOException::class) constructor(
             val str = getXmlString(serverInfo, "currentgameowned", false) ?: return null
             return str != "0" && !str.equals("false", ignoreCase = true)
         }
+
+        /**
+         * Whether someone is streaming the running game, so there is a stream to join. Null is a
+         * host that does not say, which is every host before Polaris 1.4.12 and every host that
+         * is not Polaris: watching stays on offer there, as it always was.
+         */
+        @JvmStatic
+        @Throws(XmlPullParserException::class, IOException::class)
+        fun parseCurrentGameWatchable(serverInfo: String): Boolean? {
+            val str = getXmlString(serverInfo, "currentgamewatchable", false)?.trim() ?: return null
+            return str != "0" && !str.equals("false", ignoreCase = true)
+        }
+
+        /** The owner's device as its host names it. currentgameowner is an id, not a name. */
+        @JvmStatic
+        @Throws(XmlPullParserException::class, IOException::class)
+        fun parseCurrentGameOwnerDeviceName(serverInfo: String): String? =
+            com.papi.nova.grid.novaHostOwnerLabel(getXmlString(serverInfo, "currentgameownername", false))
+
+        /** The mode of the stream there is to watch, so a watcher asks for it the first time. */
+        @JvmStatic
+        @Throws(XmlPullParserException::class, IOException::class)
+        fun parseCurrentGameWatchProfile(serverInfo: String): com.papi.nova.nvstream.NovaWatchProfile? =
+            com.papi.nova.nvstream.NovaWatchProfile.fromFields(
+                getXmlString(serverInfo, "currentgamewatchwidth", false),
+                getXmlString(serverInfo, "currentgamewatchheight", false),
+                getXmlString(serverInfo, "currentgamewatchfpsx1000", false),
+                getXmlString(serverInfo, "currentgamewatchbitdepth", false),
+                getXmlString(serverInfo, "currentgamewatchcodec", false),
+            )
 
         @JvmStatic
         @Throws(XmlPullParserException::class, IOException::class)

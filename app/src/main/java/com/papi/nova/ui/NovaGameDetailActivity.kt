@@ -246,6 +246,11 @@ class NovaGameDetailActivity : NovaActivity() {
     /** The strip explains this row; rows point it at themselves as focus moves. */
     private var explainedRow by mutableStateOf(NovaPlaySetupRow.WHERE_IT_RUNS)
 
+    // Where a Space game opens is its own control above the rows, not a row the strip explains,
+    // so a Space game's strip starts on Resolution. A row it does not have would leave it empty.
+    private fun openingExplainedRow(): NovaPlaySetupRow =
+        if (spaceGame != null) NovaPlaySetupRow.RESOLUTION else NovaPlaySetupRow.WHERE_IT_RUNS
+
     /**
      * The Polaris Sync sheet's engine, as Every Game's second surface. Started when
      * that scope first opens so the panel does not poll the host for people who never
@@ -406,7 +411,7 @@ class NovaGameDetailActivity : NovaActivity() {
             // The panel reopens on the game it was opened for; host scope is a place
             // someone flips to, not a place the panel should quietly resume in.
             playSetupScope = NovaPlaySetupScope.THIS_GAME
-            explainedRow = NovaPlaySetupRow.WHERE_IT_RUNS
+            explainedRow = openingExplainedRow()
             hostSyncEngine?.close()
             true
         }
@@ -439,7 +444,7 @@ class NovaGameDetailActivity : NovaActivity() {
         explainedRow = if (scope == NovaPlaySetupScope.EVERY_GAME) {
             NovaPlaySetupRow.HOST_DEFAULT_DISPLAY
         } else {
-            NovaPlaySetupRow.WHERE_IT_RUNS
+            openingExplainedRow()
         }
         if (scope == NovaPlaySetupScope.EVERY_GAME) {
             hostSyncEngine?.let { engine ->
@@ -508,8 +513,7 @@ class NovaGameDetailActivity : NovaActivity() {
         // Which row the comparison strip is explaining. It follows focus, and a tap sets
         // it too -- touch has no cursor for the strip to follow, and a finger that lands
         // on a row should get the same explanation a d-pad would.
-        // Where a Space game opens is its own control above the rows, not a row the strip explains.
-        explainedRow = if (spaceGame != null) NovaPlaySetupRow.RESOLUTION else NovaPlaySetupRow.WHERE_IT_RUNS
+        explainedRow = openingExplainedRow()
         // An explicit resolution, held until launch rather than launching on the spot.
         // Picking one used to start the game immediately, which is why the row that owned
         // it could not be a setting: there was nothing to set. The choice itself is
@@ -1112,8 +1116,16 @@ class NovaGameDetailActivity : NovaActivity() {
          * says so.
          */
         fun chooseResolution(choice: NovaDisplayResolutionChoice) {
-            chosenResolution = choice
-            saveResolutionOverride(currentGame, choice.id)
+            if (choice.id == NovaDisplayResolutionPlanner.DEVICE_SETTINGS_ID) {
+                // The device's own setting is what a launch uses with nothing chosen, so going
+                // back to it is clearing the choice. Stored as a choice it would freeze today's
+                // size into the launch and stop following the setting.
+                chosenResolution = null
+                clearResolutionOverride(currentGame)
+            } else {
+                chosenResolution = choice
+                saveResolutionOverride(currentGame, choice.id)
+            }
             if (spaceGame != null) loadOptimization(profilePreference)
         }
 
@@ -1840,7 +1852,11 @@ class NovaGameDetailActivity : NovaActivity() {
                     } else if (optimizationState.reviewRequired) {
                         getString(R.string.nova_library_review_and_launch)
                     } else if (currentGame.space != null) {
-                        getString(if (currentGame.space?.target == "big-picture-v1") R.string.nova_space_open_big_picture else R.string.nova_space_play)
+                        if (com.papi.nova.manager.WorkerLaunchContract.isLauncherEntry(currentGame.space?.target)) {
+                            getString(R.string.nova_space_open_launcher, currentGame.name)
+                        } else {
+                            getString(R.string.nova_space_play)
+                        }
                     } else {
                         // Describe the same composed choices attemptLaunch() will send.
                         launchPreview.profileSummary
@@ -2256,10 +2272,16 @@ class NovaGameDetailActivity : NovaActivity() {
             ?.takeIf { it.isNotBlank() }
             ?: clientSettings?.effective?.displayMode
             ?: ""
+        // Planned from what this device is set to stream at, which is what a launch uses with
+        // nothing chosen, so the row and the launch cannot disagree.
+        val preferences = PreferenceConfiguration.readPreferences(this)
         return NovaDisplayResolutionPlanner.from(
             contract = game.displayPlanner,
             fallbackMode = fallbackMode,
-            includeAdvanced = true
+            includeAdvanced = true,
+            device = NovaDisplayResolutionPlanner.DeviceMode(
+                preferences.width, preferences.height, preferences.fps.toInt(),
+            )
         )
     }
 

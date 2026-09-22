@@ -410,16 +410,17 @@ internal fun NovaGameDetailContent(
                 } else {
                     val summary = optimizationState.profileSummary
                     // Where this game opens is drawn as its own control above the rows it used to
-                    // be one of, so the legend under the rows explains only the rows.
+                    // be one of, so the legend under the rows explains the rows, or the one place
+                    // whose card holds focus, never the places restated as choices.
                     val destinationsRow = playSetupRows.firstOrNull { it.row == NovaPlaySetupRow.PLAY_IN }
                     val settingRows = playSetupRows.filter { it.row != NovaPlaySetupRow.PLAY_IN }
+                    // Which destination card the cursor is on, for the legend to describe.
+                    var focusedDestination by remember { mutableStateOf(-1) }
                     // Spend the room that is there rather than a number picked in advance:
                     // each advertised launch control leaves less room for the legend.
-                    val consequenceLines = novaPlaySetupConsequenceLines(
-                        bodyHeight,
-                        settingRows.size,
-                        destinations = destinationsRow != null,
-                    )
+                    // The legend is pinned under the rows, so it is budgeted against the few
+                    // rows kept in view above it rather than against every row the host added.
+                    val consequenceLines = novaPlaySetupPinnedLegendLines(bodyHeight, settingRows.size)
                     NovaPlaySetupBody(
                         plan = novaPlaySetupPlan(
                             // The resolved mode, not the name of the control that sets
@@ -513,6 +514,10 @@ internal fun NovaGameDetailContent(
                                     status = destinationsRow.caption,
                                     options = destinationsRow.options,
                                     autoFocus = destinationsFocus,
+                                    onFocused = { index ->
+                                        focusedDestination = index
+                                        onExplainPlaySetupRow(NovaPlaySetupRow.PLAY_IN)
+                                    },
                                 )
                             }
                             // Host-backed rows, drawn in a fixed order. Each advances its own value
@@ -528,6 +533,16 @@ internal fun NovaGameDetailContent(
                                     selected = rowState.overridden,
                                     onClick = { onAdvancePlaySetupRow(rowState.row) },
                                     onFocused = { onExplainPlaySetupRow(rowState.row) },
+                                    firstPressFocuses = true,
+                                )
+                            }
+                            // After the choices and inside their scroll, so it cannot stand
+                            // between the rows and the legend that explains them.
+                            if (mangoHudEnabled) {
+                                MangoHudPassiveStatus(
+                                    label = mangoHudStatusLabel,
+                                    caption = mangoHudStatusCaption,
+                                    warning = mangoHudWarning
                                 )
                             }
                         },
@@ -536,9 +551,24 @@ internal fun NovaGameDetailContent(
                             // state of its own. A row that has nothing to compare -- one
                             // launch mode, or no display planner on this host -- draws
                             // nothing rather than a strip that repeats the row above it.
+                            // While a destination card holds focus, the legend says what that
+                            // one place means, in full where the card had to cut it. Falling
+                            // back to the first row opened Play Setup on "If you changed where
+                            // it runs" with the cursor on Desktop, and no legend at all opened
+                            // it with the drawer empty.
+                            val place = novaPlaySetupPlaceUnderCursor(
+                                explainedPlaySetupRow,
+                                destinationsRow?.options.orEmpty(),
+                                focusedDestination,
+                            )
                             val explained = settingRows.firstOrNull { it.row == explainedPlaySetupRow }
-                                ?: settingRows.firstOrNull()
-                            if (explained != null && explained.options.size > 1) {
+                            if (place != null) {
+                                NovaPlaySetupPlaceLegend(
+                                    title = stringResource(R.string.nova_play_setup_place_legend),
+                                    place = place,
+                                    consequenceMaxLines = consequenceLines,
+                                )
+                            } else if (explained != null && explained.options.size > 1) {
                                 NovaPlaySetupComparison(
                                     title = explained.stripTitle,
                                     options = explained.options,
@@ -547,13 +577,6 @@ internal fun NovaGameDetailContent(
                             }
                         },
                     )
-                    if (mangoHudEnabled) {
-                        MangoHudPassiveStatus(
-                            label = mangoHudStatusLabel,
-                            caption = mangoHudStatusCaption,
-                            warning = mangoHudWarning
-                        )
-                    }
                 }
 
                 // No sheets. Every one of these choices is made in the strip above,
@@ -568,9 +591,11 @@ internal fun NovaGameDetailContent(
                 headline = uiState.game.name,
                 scrollState = verticalScroll,
                 onDismiss = onDismissDestination,
-            ) {
+            ) { bodyHeight ->
                 NovaArtworkStudio(
                     initiallyExpanded = true,
+                    fillsDestination = true,
+                    fitHeight = bodyHeight,
                     state = artworkState,
                     initialQuery = uiState.game.name,
                     onRefresh = onRefreshArtwork,

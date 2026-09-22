@@ -46,6 +46,12 @@ class NvConnection(
     /** The host's explanation for the last refused launch, for the launch sheet; null when it sent none. */
     @Volatile
     var lastHostRefusal: HostRefusal? = null
+
+    private val nobodyIsStreaming =
+        "A game is open on this host, but nobody is streaming it, so there is nothing to watch."
+
+    /** Set when a watch was given up with its own reason on screen, so the general one is not put over it. */
+    private var watchRefusalExplained = false
         private set
     private val isMonkey: Boolean
 
@@ -196,7 +202,12 @@ class NvConnection(
         context.serverCodecModeSupport = h.getServerCodecModeSupport(serverInfo).toInt()
         context.sessionToken = h.getCurrentGameSessionToken(serverInfo)
         context.currentGameOwnedByClient = h.getCurrentGameOwned(serverInfo)
-        context.currentGameOwnerName = h.getCurrentGameOwner(serverInfo)
+        // currentgameowner is the owner's id on a Desktop session, which is nothing to show
+        // anybody. A host that names the device is believed; an id is never put on screen.
+        context.currentGameOwnerName = NvHTTP.parseCurrentGameOwnerDeviceName(serverInfo)
+            ?: com.papi.nova.grid.novaHostOwnerLabel(h.getCurrentGameOwner(serverInfo))
+        val hostSaysWatchable = NvHTTP.parseCurrentGameWatchable(serverInfo)
+        val hostWatchProfile = NvHTTP.parseCurrentGameWatchProfile(serverInfo)
 
         context.negotiatedHdr = (streamConfig.getSupportedVideoFormats() and MoonBridge.VIDEO_FORMAT_MASK_10BIT) != 0
         if ((context.serverCodecModeSupport and 0x20200) == 0 && context.negotiatedHdr) {
@@ -279,18 +290,33 @@ class NvConnection(
                         listener.displayMessage("This stream is already owned by this device. Resume it instead of watching.")
                         return false
                     }
+                    if (context.watchOnlyRequested) {
+                        if (hostSaysWatchable == false) {
+                            // The host has just said nobody is streaming this game. Asking anyway
+                            // only fetches the 409 that says the same thing.
+                            listener.displayMessage(nobodyIsStreaming)
+                            return false
+                        }
+                        // The host has said what the stream is, so ask for that the first time
+                        // rather than for this device's own mode and be refused.
+                        if (hostWatchProfile != null && !adoptWatchProfile(context, hostWatchProfile)) {
+                            return false
+                        }
+                    }
                     if (shouldReplaceCurrentSession(streamConfig.getForceFreshLaunch(), context.watchOnlyRequested)) {
                         LimeLog.info("Nova: Auto Safe requested fresh launch; replacing paused session instead of resuming")
                         return quitAndLaunch(h, context)
                     }
-                    if (!h.launchApp(context, "resume", app.appUUID, app.appId, context.negotiatedHdr, context.watchOnlyRequested)) {
-                        listener.displayMessage(
-                            if (context.watchOnlyRequested) {
-                                "Failed to join active stream"
-                            } else {
-                                "Failed to resume existing session"
-                            },
-                        )
+                    if (!resumeOrJoin(h, context, app)) {
+                        if (!watchRefusalExplained) {
+                            listener.displayMessage(
+                                if (context.watchOnlyRequested) {
+                                    "Failed to join active stream"
+                                } else {
+                                    "Failed to resume existing session"
+                                },
+                            )
+                        }
                         return false
                     }
                     if (context.watchOnlyRequested) {
@@ -335,7 +361,9 @@ class NvConnection(
                     )
                     return false
                 } else if (e.getErrorCode() == 409 && context.watchOnlyRequested) {
-                    listener.displayMessage("No active stream is available to watch.")
+                    // A game can be open on the host with nobody streaming it: its owner left it
+                    // running, or its launch never reached a picture. There is nothing to watch.
+                    listener.displayMessage(nobodyIsStreaming)
                     return false
                 } else {
                     throw e
@@ -351,6 +379,83 @@ class NvConnection(
             }
             return launchNotRunningApp(h, context)
         }
+    }
+
+    /**
+     * Resumes this device's session, or joins someone else's to watch it.
+     *
+     * A watcher that asked for its own mode is refused with the stream's mode in the answer.
+     * It takes that mode and asks once more. A second refusal is the host's last word.
+     */
+    @Throws(IOException::class, XmlPullParserException::class)
+    private fun resumeOrJoin(h: NvHTTP, context: ConnectionContext, app: NvApp): Boolean {
+        try {
+            return h.launchApp(context, "resume", app.appUUID, app.appId, context.negotiatedHdr, context.watchOnlyRequested)
+        } catch (e: HostHttpResponseException) {
+            if (!context.watchOnlyRequested || e.getErrorCode() != 412) {
+                throw e
+            }
+            // Fields first; the sentence is what a released host sends and nothing else.
+            val profile = e.getWatchProfile() ?: NovaWatchProfile.parse(e.getErrorMessage()) ?: throw e
+            if (!adoptWatchProfile(context, profile)) {
+                return false
+            }
+        }
+        return h.launchApp(context, "resume", app.appUUID, app.appId, context.negotiatedHdr, true)
+    }
+
+    private fun adoptWatchProfile(context: ConnectionContext, profile: NovaWatchProfile): Boolean {
+        val streamConfig = context.streamConfig!!
+        val listener = context.connListener!!
+        val deviceFormats = context.deviceVideoFormats
+            ?: streamConfig.getSupportedVideoFormats().also { context.deviceVideoFormats = it }
+        val decodesTenBit = (deviceFormats and MoonBridge.VIDEO_FORMAT_MASK_10BIT) != 0
+        if (profile.tenBit && !decodesTenBit) {
+            watchRefusalExplained = true
+            listener.displayMessage(
+                novaTenBitWatchRefusal(
+                    profile.codec,
+                    decodesHevcTenBit = context.decodesHevcTenBit,
+                    decodesAv1TenBit = context.decodesAv1TenBit,
+                    hdrRequestedInSettings = context.hdrRequestedInSettings,
+                ),
+            )
+            return false
+        }
+        val codecMask = when (profile.codec) {
+            "h264" -> MoonBridge.VIDEO_FORMAT_MASK_H264
+            "hevc" -> MoonBridge.VIDEO_FORMAT_MASK_H265
+            "av1" -> MoonBridge.VIDEO_FORMAT_MASK_AV1
+            else -> 0
+        }
+        if (codecMask != 0 && (deviceFormats and codecMask) == 0) {
+            watchRefusalExplained = true
+            listener.displayMessage(
+                "That stream is " + profile.codec!!.uppercase() + ", which this device cannot decode, so it cannot be watched here.",
+            )
+            return false
+        }
+        // Whatever else matches, the handshake offers the stream's own codec at its own depth.
+        streamConfig.adoptWatchVideoFormats(
+            novaWatchVideoFormats(deviceFormats, profile.codec, profile.tenBit),
+        )
+        if (profile.width == context.negotiatedWidth && profile.height == context.negotiatedHeight &&
+            profile.fps == context.negotiatedLaunchRefreshRate && profile.tenBit == context.negotiatedHdr
+        ) {
+            return true
+        }
+        LimeLog.info(
+            "Nova: watching takes the active stream's mode " + profile.width + "x" + profile.height + "@" + profile.fps +
+                (if (profile.tenBit) " 10-bit" else " 8-bit") + " in place of " +
+                context.negotiatedWidth + "x" + context.negotiatedHeight,
+        )
+        context.negotiatedWidth = profile.width
+        context.negotiatedHeight = profile.height
+        context.negotiatedLaunchRefreshRate = profile.fps
+        context.negotiatedHdr = profile.tenBit
+        streamConfig.adoptWatchMode(profile.width, profile.height, profile.fps)
+        listener.streamModeAdopted(profile.width, profile.height)
+        return true
     }
 
     @Throws(IOException::class, XmlPullParserException::class)
@@ -580,6 +685,13 @@ class NvConnection(
 
     fun setWatchOnlyRequested(watchOnlyRequested: Boolean) {
         context.watchOnlyRequested = watchOnlyRequested
+    }
+
+    /** What this device could decode and what it asked for, so a watcher refused a 10-bit stream is told why. */
+    fun setTenBitAbility(decodesHevcTenBit: Boolean, decodesAv1TenBit: Boolean, hdrRequestedInSettings: Boolean) {
+        context.decodesHevcTenBit = decodesHevcTenBit
+        context.decodesAv1TenBit = decodesAv1TenBit
+        context.hdrRequestedInSettings = hdrRequestedInSettings
     }
 
     fun sendExecServerCmd(cmdId: Int) {

@@ -59,7 +59,14 @@ import com.papi.nova.api.PolarisHostSleepResult
 import com.papi.nova.binding.PlatformBinding
 import com.papi.nova.binding.crypto.AndroidCryptoProvider
 import com.papi.nova.computers.ComputerManagerService
+import com.papi.nova.computers.HostForget
+import com.papi.nova.grid.NovaHostPlaySurface
+import com.papi.nova.grid.NovaHostRowFocusMove
 import com.papi.nova.grid.PcGridAdapter
+import com.papi.nova.grid.novaHostInUse
+import com.papi.nova.grid.novaHostPlaySurface
+import com.papi.nova.grid.novaWatchRate
+import com.papi.nova.grid.novaHostRowFocusMove
 import com.papi.nova.grid.assets.DiskAssetLoader
 import com.papi.nova.manager.HoldToConfirm
 import com.papi.nova.manager.HostPowerAction
@@ -92,7 +99,17 @@ import com.papi.nova.ui.AdapterFragmentCallbacks
 import com.papi.nova.ui.NovaLibraryActivity
 import com.papi.nova.ui.NovaServerGridLayoutManager
 import com.papi.nova.ui.NovaQrScanActivity
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import com.papi.nova.ui.NovaHostSheet
+import com.papi.nova.ui.NovaHostSheetAction
+import com.papi.nova.ui.NovaHostSheetMenu
+import com.papi.nova.ui.NovaHostSheetState
+import com.papi.nova.ui.compose.NovaComposeTheme
+import com.papi.nova.ui.novaBreakAtDots
+import com.papi.nova.ui.novaHostSheetCopy
 import com.papi.nova.ui.NovaSheetChrome
+import com.google.android.material.snackbar.Snackbar
 import com.papi.nova.ui.NovaSnackbar
 import com.papi.nova.ui.NovaThemeManager
 import com.papi.nova.ui.NovaWelcomeActivity
@@ -122,6 +139,18 @@ import org.xmlpull.v1.XmlPullParserException
 
 internal fun dashboardSetupActionHeight(collapsed: Boolean, compactHeight: Int): Int =
     if (collapsed) compactHeight else LinearLayout.LayoutParams.WRAP_CONTENT
+
+/**
+ * How many columns a host's sheet lays its actions in.
+ *
+ * Two when the sheet is wide enough for the longest label, "Test Network Connection", to keep one
+ * line in half of it, which a landscape sheet is on every handheld Nova runs on. One upright, and
+ * one when larger type would push the labels onto second lines.
+ */
+internal fun novaHostSheetColumns(landscape: Boolean, sheetWidthDp: Float, fontScale: Float): Int =
+    if (landscape && sheetWidthDp >= NOVA_HOST_SHEET_TWO_COLUMN_MIN_DP * fontScale.coerceAtLeast(1f)) 2 else 1
+
+internal const val NOVA_HOST_SHEET_TWO_COLUMN_MIN_DP = 520f
 
 class PcView : NovaActivity(), AdapterFragmentCallbacks {
     private val THEME_PICKER_GRID_GAP_DP = 8
@@ -169,6 +198,9 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
     private val dashboardRailButtonText = mutableMapOf<Int, CharSequence>()
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && moveFocusWithinHostRow(event.keyCode)) {
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN &&
             event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
         ) {
@@ -181,6 +213,22 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun moveFocusWithinHostRow(keyCode: Int): Boolean {
+        val focus = currentFocus ?: return false
+        val row = serverGridView?.findContainingItemView(focus) ?: return false
+        val move = novaHostRowFocusMove(
+            right = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT,
+            left = keyCode == KeyEvent.KEYCODE_DPAD_LEFT,
+            onRow = focus === row,
+            onManage = focus.id == R.id.server_actions_button,
+        )
+        return when (move) {
+            NovaHostRowFocusMove.TO_MANAGE -> row.findViewById<View>(R.id.server_actions_button)?.requestFocus() == true
+            NovaHostRowFocusMove.TO_ROW -> row.requestFocus()
+            NovaHostRowFocusMove.NONE -> false
+        }
     }
 
     private fun isServerFilterFocus(focus: View?): Boolean {
@@ -361,30 +409,21 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
 
         val header = findViewById<View>(R.id.pcViewHeader)
         if (header != null) {
-            header.setOnApplyWindowInsetsListener { v, insets ->
-                val topInset =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        insets.getInsets(android.view.WindowInsets.Type.statusBars()).top
-                    } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-                        insets.systemWindowInsetTop
-                    } else {
-                        0
-                    }
-                val headerTopPadding =
-                    if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
-                        UiHelper.dpToPx(this, 4f).toInt()
-                    } else {
-                        topInset + UiHelper.dpToPx(this, 16f).toInt()
-                    }
-                v.setPadding(
-                    v.paddingLeft,
-                    headerTopPadding,
-                    v.paddingRight,
-                    v.paddingBottom,
-                )
-                insets
-            }
-            header.requestApplyInsets()
+            // Breathing room only. The root above already keeps the dashboard clear of the status
+            // bar, and the header used to add the bar's height a second time when upright: on a
+            // Pixel 10 Pro that is 80dp, so "Nova" started 180dp down a screen with nothing over it.
+            val headerTopPadding =
+                if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                    UiHelper.dpToPx(this, 4f).toInt()
+                } else {
+                    UiHelper.dpToPx(this, 16f).toInt()
+                }
+            header.setPadding(
+                header.paddingLeft,
+                headerTopPadding,
+                header.paddingRight,
+                header.paddingBottom,
+            )
         }
 
         spaceParticleView = findViewById(R.id.space_particles)
@@ -1359,26 +1398,24 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
     }
 
     private fun openBestPlaySurface(computer: ComputerDetails) {
-        if (computer.runningGameId != 0) {
-            resumeOrWatchRunningGame(computer)
-            return
-        }
-
-        if (computer.libraryState == ComputerDetails.LibraryState.AVAILABLE) {
-            doNovaLibrary(computer)
-            return
-        }
-
-        if (computer.libraryState == ComputerDetails.LibraryState.UNKNOWN) {
-            val computerObject = findComputerObject(computer.uuid)
-            if (computerObject != null) {
-                maybeProbeLibraryReadiness(computerObject)
+        val surface = novaHostPlaySurface(
+            runningGame = computer.runningGameId != 0,
+            ownedByThisDevice = computer.currentGameOwnedByClient,
+            library = computer.libraryState,
+            watchable = computer.currentGameWatchable,
+        )
+        when (surface) {
+            NovaHostPlaySurface.RESUME, NovaHostPlaySurface.WATCH -> resumeOrWatchRunningGame(computer)
+            NovaHostPlaySurface.LIBRARY -> doNovaLibrary(computer)
+            NovaHostPlaySurface.CHECK_LIBRARY -> {
+                val computerObject = findComputerObject(computer.uuid)
+                if (computerObject != null) {
+                    maybeProbeLibraryReadiness(computerObject)
+                }
+                NovaSnackbar.show(this, getString(R.string.pcview_library_checking))
             }
-            NovaSnackbar.show(this, getString(R.string.pcview_library_checking))
-            return
+            NovaHostPlaySurface.APP_LIST -> doAppList(computer, false, false)
         }
-
-        doAppList(computer, false, false)
     }
 
     private fun syncComputerList() {
@@ -1963,157 +2000,181 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
         stopComputerUpdates(false)
 
         val sheet = BottomSheetDialog(this, R.style.NovaBottomSheet)
-        sheet.setContentView(R.layout.nova_app_context_sheet)
-        val sheetRoot = sheet.findViewById<View>(R.id.nova_sheet_root)
-        sheet.setOnShowListener {
-            NovaSheetChrome.applyBottomSheetChrome(sheet, sheetRoot)
-            sheet.findViewById<TextView>(R.id.sheet_app_name)?.let(NovaSheetChrome::styleSheetTitle)
-        }
         sheet.setOnDismissListener { startComputerUpdates() }
-
-        val titleView = sheet.findViewById<TextView>(R.id.sheet_app_name)
-        if (titleView != null) {
-            val status =
-                when (computer.details.state) {
-                    ComputerDetails.State.ONLINE -> getString(R.string.pcview_menu_header_online)
-                    ComputerDetails.State.OFFLINE -> getString(R.string.pcview_menu_header_offline)
-                    else -> getString(R.string.pcview_menu_header_unknown)
-                }
-            titleView.text = getString(R.string.pcview_menu_header_format, computer.details.name, status)
+        // Dialogs map BACK out of the box but not a pad's B, and this sheet has no close control.
+        sheet.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BUTTON_B && event.action == KeyEvent.ACTION_UP) {
+                sheet.dismiss()
+                true
+            } else {
+                false
+            }
         }
 
-        val actions = sheet.findViewById<LinearLayout>(R.id.sheet_actions)
-        if (actions == null) {
-            sheet.show()
-            return
+        val details = computer.details
+        val menu = NovaHostSheetMenu()
+        fun action(key: String, label: Int, caption: Int, icon: Int) =
+            NovaHostSheetAction(key, getString(label), getString(caption), icon)
+        fun serverConfig() = action(
+            "server_config",
+            R.string.pcview_menu_open_management_page,
+            R.string.pcview_sheet_caption_server_config,
+            R.drawable.ic_settings,
+        )
+        val openServerConfig = {
+            val url = computer.guessManagementUrl()
+            if (url != null) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } else {
+                Toast.makeText(this, R.string.pcview_error_no_management_url, Toast.LENGTH_SHORT).show()
+            }
         }
 
-        if (computer.details.state == ComputerDetails.State.OFFLINE ||
-            computer.details.state == ComputerDetails.State.UNKNOWN
+        if (details.state == ComputerDetails.State.OFFLINE ||
+            details.state == ComputerDetails.State.UNKNOWN
         ) {
-            if (!needsPairing(computer.details)) {
-                addPcSheetAction(actions, getString(R.string.pcview_menu_start_polaris)) {
-                    sheet.dismiss()
-                    startPolarisFromNova(computer.details)
+            if (!needsPairing(details)) {
+                menu.play(action("wake", R.string.pcview_menu_start_polaris, R.string.pcview_sheet_caption_wake, R.drawable.ic_eye_open)) {
+                    startPolarisFromNova(details)
                 }
             }
-            addPcSheetAction(actions, getString(R.string.pcview_menu_send_wol)) {
-                sheet.dismiss()
-                doWakeOnLan(computer.details)
+            menu.play(action("send_wol", R.string.pcview_menu_send_wol, R.string.pcview_sheet_caption_send_wol, R.drawable.ic_eye_open)) {
+                doWakeOnLan(details)
             }
-        } else if (needsPairing(computer.details)) {
-            addPcSheetAction(actions, getString(R.string.pcview_menu_pair_pc)) {
-                sheet.dismiss()
-                doPair(computer.details, null, null)
+        } else if (needsPairing(details)) {
+            menu.play(action("pair", R.string.pcview_menu_pair_pc, R.string.pcview_sheet_caption_pair, R.drawable.ic_lock)) {
+                doPair(details, null, null)
             }
-            addPcSheetAction(actions, getString(R.string.pcview_menu_pair_pc_otp)) {
-                sheet.dismiss()
-                doOTPPair(computer.details)
+            menu.manage(action("pair_otp", R.string.pcview_menu_pair_pc_otp, R.string.pcview_sheet_caption_pair_otp, R.drawable.ic_lock)) {
+                doOTPPair(details)
             }
-            addPcSheetAction(actions, getString(R.string.pcview_menu_scan_qr)) {
-                sheet.dismiss()
+            menu.manage(action("scan_qr", R.string.pcview_menu_scan_qr, R.string.pcview_sheet_caption_scan_qr, R.drawable.ic_qr_scan)) {
                 launchQrScanner()
             }
-            if (!computer.details.nvidiaServer) {
-                addPcSheetAction(actions, getString(R.string.pcview_menu_open_management_page)) {
-                    sheet.dismiss()
-                    val url = computer.guessManagementUrl()
-                    if (url != null) {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } else {
-                        Toast.makeText(this, R.string.pcview_error_no_management_url, Toast.LENGTH_SHORT).show()
+            if (!details.nvidiaServer) {
+                menu.manage(serverConfig(), openServerConfig)
+            }
+        } else {
+            val libraryFirst = novaHostPlaySurface(
+                runningGame = details.runningGameId != 0,
+                ownedByThisDevice = details.currentGameOwnedByClient,
+                library = details.libraryState,
+                watchable = details.currentGameWatchable,
+            ).let { it != NovaHostPlaySurface.RESUME && it != NovaHostPlaySurface.WATCH }
+            val offerLibrary = {
+                if (details.libraryState == ComputerDetails.LibraryState.AVAILABLE) {
+                    menu.play(action("open_library", R.string.pcview_menu_nova_library, R.string.pcview_sheet_caption_open_library, R.drawable.ic_play)) {
+                        doNovaLibrary(details)
+                    }
+                } else if (details.libraryState == ComputerDetails.LibraryState.UNKNOWN) {
+                    menu.play(action("checking_library", R.string.pcview_library_checking, R.string.pcview_sheet_caption_checking_library, R.drawable.ic_update)) {
+                        maybeProbeLibraryReadiness(computer)
                     }
                 }
             }
-        } else {
-            addPcSheetSection(actions, getString(R.string.pcview_menu_section_play))
-            if (computer.details.runningGameId != 0) {
-                if (computer.details.currentGameOwnedByClient == false) {
-                    addPcSheetAction(actions, getString(R.string.applist_menu_watch)) {
-                        sheet.dismiss()
-                        val binder = managerBinder ?: return@addPcSheetAction
-                        ServerHelper.doWatch(this, createWatchTargetApp(computer.details), computer.details, binder)
+            // The first thing offered is the sheet's primary, and it is the one the card leads to.
+            if (libraryFirst) offerLibrary()
+            if (details.runningGameId != 0) {
+                if (details.currentGameOwnedByClient == false) {
+                    // A host that says nobody is streaming the game has nothing to watch, and a
+                    // tile that can only answer "there is nothing to watch" is not an offer.
+                    if (novaHostInUse(details.currentGameOwnerDeviceName, details.currentGameWatchable).offersWatch) {
+                        val mode = details.currentGameWatchProfile
+                        val caption = if (mode != null) {
+                            getString(R.string.pcview_sheet_caption_watch_mode, mode.width, mode.height, novaWatchRate(mode.fps))
+                        } else {
+                            getString(R.string.pcview_sheet_caption_watch)
+                        }
+                        menu.play(NovaHostSheetAction("watch", getString(R.string.applist_menu_watch), caption, R.drawable.ic_eye_open)) {
+                            val binder = managerBinder ?: return@play
+                            ServerHelper.doWatch(this, createWatchTargetApp(details), details, binder)
+                        }
                     }
                 } else {
-                    addPcSheetAction(actions, getString(R.string.applist_menu_resume)) {
-                        sheet.dismiss()
-                        resumeOrWatchRunningGame(computer.details)
+                    menu.play(action("resume", R.string.applist_menu_resume, R.string.pcview_sheet_caption_resume, R.drawable.ic_play)) {
+                        resumeOrWatchRunningGame(details)
                     }
-                    addPcSheetAction(actions, getString(R.string.applist_menu_quit)) {
-                        sheet.dismiss()
+                    menu.play(action("end_session", R.string.applist_menu_quit, R.string.pcview_sheet_caption_end_session, R.drawable.ic_close)) {
                         val runningApp = NvApp()
-                        runningApp.appId = computer.details.runningGameId
-                        val binder = managerBinder ?: return@addPcSheetAction
+                        runningApp.appId = details.runningGameId
+                        val binder = managerBinder ?: return@play
                         UiHelper.displayQuitConfirmationDialog(
                             this,
-                            { ServerHelper.doQuit(this, computer.details, runningApp, binder, null) },
+                            { ServerHelper.doQuit(this, details, runningApp, binder, null) },
                             null,
                         )
                     }
                 }
             }
-            if (computer.details.libraryState == ComputerDetails.LibraryState.AVAILABLE) {
-                addPcSheetAction(actions, getString(R.string.pcview_menu_nova_library)) {
-                    sheet.dismiss()
-                    doNovaLibrary(computer.details)
-                }
-            } else if (computer.details.libraryState == ComputerDetails.LibraryState.UNKNOWN) {
-                addPcSheetAction(actions, getString(R.string.pcview_library_checking)) {
-                    sheet.dismiss()
-                    maybeProbeLibraryReadiness(computer)
-                }
-            }
+            if (!libraryFirst) offerLibrary()
 
-            addPcSheetSection(actions, getString(R.string.pcview_menu_section_manage))
-            addPcSheetAction(actions, getString(R.string.pcview_menu_start_polaris)) {
-                sheet.dismiss()
-                startPolarisFromNova(computer.details)
-            }
-            addPcSheetAction(actions, getString(R.string.pcview_menu_app_list)) {
-                sheet.dismiss()
-                doAppList(computer.details, false, false)
-            }
-            if (!computer.details.nvidiaServer) {
-                addPcSheetAction(actions, getString(R.string.pcview_menu_open_management_page)) {
-                    sheet.dismiss()
-                    val url = computer.guessManagementUrl()
-                    if (url != null) {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } else {
-                        Toast.makeText(this, R.string.pcview_error_no_management_url, Toast.LENGTH_SHORT).show()
-                    }
+            // Only where a hold on the dashboard would work: the same host, and its own word that
+            // this device may put it to sleep. An awake host has nothing to be woken for, so the
+            // row that used to say Wake Host here is gone rather than renamed.
+            if (details.uuid == preferredHostPowerComputer()?.uuid && currentHostPowerAction() == HostPowerAction.SLEEP) {
+                menu.manage(action("sleep", R.string.pcview_quick_sleep_host, R.string.pcview_sheet_caption_sleep, R.drawable.ic_eye_closed)) {
+                    beginHostSleep()
                 }
+            }
+            menu.manage(action("app_list", R.string.pcview_menu_app_list, R.string.pcview_sheet_caption_app_list, R.drawable.ic_menu)) {
+                doAppList(details, false, false)
+            }
+            if (!details.nvidiaServer) {
+                menu.manage(serverConfig(), openServerConfig)
             }
         }
 
-        addPcSheetAction(actions, getString(R.string.pcview_menu_test_network)) {
-            sheet.dismiss()
+        menu.manage(action("test_network", R.string.pcview_menu_test_network, R.string.pcview_sheet_caption_test_network, R.drawable.ic_language)) {
             ServerHelper.doNetworkTest(this)
         }
-        addPcSheetAction(actions, getString(R.string.pcview_menu_details)) {
-            sheet.dismiss()
-            Dialog.displayDialog(this, getString(R.string.title_details), computer.details.toString(), false)
+        menu.manage(action("details", R.string.pcview_menu_details, R.string.pcview_sheet_caption_details, R.drawable.ic_help)) {
+            Dialog.displayDialog(this, getString(R.string.title_details), details.toString(), false)
         }
-
-        val deleteItem = TextView(this)
-        deleteItem.text = getString(R.string.pcview_menu_delete_pc)
-        deleteItem.textSize = 15f
-        NovaSheetChrome.styleSheetAction(deleteItem, destructive = true)
-        val pad = UiHelper.dpToPx(this, 24f).toInt()
-        val padV = UiHelper.dpToPx(this, 14f).toInt()
-        deleteItem.setPadding(pad, padV, pad, padV)
-        UiHelper.applyTvFocusStyle(deleteItem)
-        deleteItem.setOnClickListener {
-            sheet.dismiss()
+        menu.remove(action("delete", R.string.pcview_menu_delete_pc, R.string.pcview_sheet_caption_delete, R.drawable.ic_delete)) {
             UiHelper.displayDeletePcConfirmationDialog(
                 this,
-                computer.details,
-                { removeComputer(computer.details) },
+                details,
+                { removeComputer(details) },
                 null,
             )
         }
-        actions.addView(deleteItem)
 
+        val copy = novaHostSheetCopy(details)
+        val address = details.activeAddress?.address?.takeIf { it.isNotBlank() }
+            ?: getString(R.string.pcview_card_status_local_network)
+        val state = NovaHostSheetState(
+            name = details.name.orEmpty(),
+            status = novaBreakAtDots(getString(copy.statusRes, copy.statusArg ?: address)),
+            tone = copy.tone,
+            hint = getString(copy.hintRes),
+            primary = menu.primary,
+            actions = menu.actions,
+            destructive = menu.destructive,
+        )
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val columns = novaHostSheetColumns(
+            landscape = landscape,
+            sheetWidthDp = NovaSheetChrome.landscapeSheetWidth(this) / resources.displayMetrics.density,
+            fontScale = resources.configuration.fontScale,
+        )
+        val content = ComposeView(this).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NovaComposeTheme {
+                    NovaHostSheet(
+                        state = state,
+                        columns = columns,
+                        onAction = { key ->
+                            // The sheet leaves first, so what the action opens is not opened under it.
+                            sheet.dismiss()
+                            menu.run(key)
+                        },
+                    )
+                }
+            }
+        }
+        sheet.setContentView(content)
+        sheet.setOnShowListener { NovaSheetChrome.applyBottomSheetChrome(sheet, content) }
         sheet.show()
     }
 
@@ -2140,31 +2201,6 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
         val runningApp = NvApp()
         runningApp.appId = computer.runningGameId
         ServerHelper.doStart(this, runningApp, computer, binder, false)
-    }
-
-    private fun addPcSheetAction(container: LinearLayout, label: String, action: Runnable) {
-        val item = TextView(this)
-        item.text = label
-        item.textSize = 15f
-        NovaSheetChrome.styleSheetAction(item)
-        val pad = UiHelper.dpToPx(this, 24f).toInt()
-        val padV = UiHelper.dpToPx(this, 14f).toInt()
-        item.setPadding(pad, padV, pad, padV)
-        UiHelper.applyTvFocusStyle(item)
-        item.setOnClickListener { action.run() }
-        container.addView(item)
-    }
-
-    private fun addPcSheetSection(container: LinearLayout, label: String) {
-        val item = TextView(this)
-        item.text = label
-        item.textSize = 11f
-        item.setAllCaps(true)
-        item.letterSpacing = 0.05f
-        item.setTextColor(NovaThemeManager.getTextMutedColor(this))
-        val pad = UiHelper.dpToPx(this, 24f).toInt()
-        item.setPadding(pad, UiHelper.dpToPx(this, 14f).toInt(), pad, UiHelper.dpToPx(this, 4f).toInt())
-        container.addView(item)
     }
 
     private fun launchQrScanner() {
@@ -2539,6 +2575,10 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
                     R.string.pcview_sleep_hold_hint
                 }
                 NovaSnackbar.showQuiet(this, getString(hint))
+            } else if (preferredHostIsReachable()) {
+                // Awake, and sleep is not on offer: waking it again would do nothing, so the
+                // press says why the control cannot do what it is named for.
+                NovaSnackbar.showQuiet(this, hostSleepRefusal())
             } else {
                 launchPolarisStartupForPreferredHost()
             }
@@ -2550,8 +2590,10 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
             if (hostSleepSequence.isBusy || currentHostPowerAction() == HostPowerAction.SLEEP) {
                 return@setOnLongClickListener false
             }
-            val reason = hostSleepUnavailableMessage() ?: return@setOnLongClickListener false
-            NovaSnackbar.showQuiet(this, reason)
+            if (!preferredHostIsReachable()) {
+                return@setOnLongClickListener false
+            }
+            NovaSnackbar.showQuiet(this, hostSleepRefusal())
             true
         }
         button.setOnTouchListener { view, event ->
@@ -2648,6 +2690,13 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
         )
     }
 
+    private fun preferredHostIsReachable(): Boolean =
+        preferredHostPowerComputer()?.state == ComputerDetails.State.ONLINE
+
+    /** Why the awake host under the control cannot be put to sleep from here, in a sentence. */
+    private fun hostSleepRefusal(): String =
+        hostSleepUnavailableMessage() ?: getString(R.string.pcview_sleep_unavailable_not_offered)
+
     private fun preferredHostPowerComputer(): ComputerDetails? {
         if (!::viewModel.isInitialized) {
             return null
@@ -2662,15 +2711,18 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
         // the host answers, even as the host drops off the network and would
         // otherwise turn the button back into Wake Host mid-check.
         val busy = hostSleepSequence.isBusy
+        // Named for what the machine is doing: one that answers is awake, and Wake Host on an
+        // awake machine offered nothing. What a hold may do is still the host's answer above.
+        val named = HostPowerPolicy.label(preferredHostIsReachable())
         val label = when {
             busy -> R.string.pcview_sleep_in_progress
-            action == HostPowerAction.SLEEP -> R.string.pcview_quick_sleep_host
+            named == HostPowerAction.SLEEP -> R.string.pcview_quick_sleep_host
             else -> R.string.pcview_quick_start_polaris
         }
         // The icon follows the label, as an open and closed pair rather than two
         // unrelated glyphs: a play arrow next to Sleep Host read as though the
         // button started something, and one icon cannot carry both states.
-        val icon = if (busy || action == HostPowerAction.SLEEP) {
+        val icon = if (busy || named == HostPowerAction.SLEEP) {
             R.drawable.ic_eye_closed
         } else {
             R.drawable.ic_eye_open
@@ -3129,6 +3181,10 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
 
                 serverRemovalScope.launch {
                     try {
+                        // Asked first: the pinned certificate that proves to the host who is
+                        // asking goes away with the PC.
+                        val forgotten = HostForget.ask(details, binder.uniqueId, appContext)
+
                         val removed = runCatching {
                             binder.removeComputer(details)
                         }.onFailure { error ->
@@ -3162,6 +3218,16 @@ class PcView : NovaActivity(), AdapterFragmentCallbacks {
                             }
                             if (!isFinishing && !isDestroyed) {
                                 syncComputerList()
+                            }
+                            HostForget.stillListedMessage(forgotten)?.let { message ->
+                                val text = appContext.getString(message, details.name)
+                                // A toast is cut at two lines, and this is the only word the player gets about
+                                // the host. The snackbar wraps; the toast is for an activity that is gone.
+                                if (!isFinishing && !isDestroyed) {
+                                    NovaSnackbar.show(this@PcView, text, Snackbar.LENGTH_LONG)
+                                } else {
+                                    Toast.makeText(appContext, text, Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
                     } finally {

@@ -81,13 +81,19 @@ class NovaReleaseMetadataTest {
         val releaseWorkflow = File(root, ".github/workflows/build.yml").readText()
         val storeNotes = File(
             root,
-            "fastlane/metadata/android/en-US/changelogs/52.txt"
+            "fastlane/metadata/android/en-US/changelogs/53.txt"
         )
         val storeNotesBody = if (storeNotes.isFile) storeNotes.readText().trimEnd() else ""
 
-        assertTrue(build.contains("versionName \"1.4.11\""))
-        assertTrue(build.contains("versionCode = 52"))
-        assertTrue(changelog.contains("## 1.4.11 - 2026-09-19"))
+        assertTrue(build.contains("versionName \"1.4.12\""))
+        // The Deck bundle reports the same version in its support report and its AppStream data.
+        assertTrue(File(root, "clients/deck/CMakeLists.txt").readText().contains("project(NovaDeck VERSION 1.4.12 "))
+        assertTrue(
+            File(root, "clients/deck/packaging/flatpak/com.papi_ux.Nova.metainfo.xml").readText()
+                .contains("<release version=\"1.4.12\" date=\"2026-09-22\"/>")
+        )
+        assertTrue(build.contains("versionCode = 53"))
+        assertTrue(changelog.contains("## 1.4.12 - 2026-09-22"))
         assertTrue(changelog.contains("Steam Input remains manual and read-only."))
         assertTrue(changelog.contains("Polaris owns encoder probing, fallback, and launch policy"))
         assertTrue(releaseWorkflow.contains("python3 scripts/extract_release_notes.py"))
@@ -108,7 +114,7 @@ class NovaReleaseMetadataTest {
             "Google Play release notes must be at most 500 Unicode characters",
             storeNotesBody.codePointCount(0, storeNotesBody.length) <= 500,
         )
-        assertTrue(storeNotesBody.startsWith("Nova 1.4.11"))
+        assertTrue(storeNotesBody.startsWith("Nova 1.4.12"))
     }
 
     @Test
@@ -268,6 +274,8 @@ class NovaReleaseMetadataTest {
             "Nova-Android-armeabi-v7a.apk.sha256",
             "Nova-Android-x86_64.apk",
             "Nova-Android-x86_64.apk.sha256",
+            "Nova-Deck-x86_64-alpha.flatpak",
+            "Nova-Deck-x86_64-alpha.flatpak.sha256",
             ")",
         ))
         assertConsecutive(stageLines, listOf(
@@ -278,7 +286,7 @@ class NovaReleaseMetadataTest {
         ))
         assertConsecutive(stageLines, listOf(
             "if [ \"\${local_asset_names[*]}\" != \"\${expected_asset_names[*]}\" ]; then",
-            "echo \"Local release assets do not match the exact six-file contract\" >&2",
+            "echo \"Local release assets do not match the exact eight-file contract\" >&2",
             "printf 'expected: %s\\n' \"\${expected_asset_names[*]}\" >&2",
             "printf 'local: %s\\n' \"\${local_asset_names[*]}\" >&2",
             "exit 1",
@@ -302,6 +310,8 @@ class NovaReleaseMetadataTest {
             "Nova-Android-armeabi-v7a.apk.sha256",
             "Nova-Android-x86_64.apk",
             "Nova-Android-x86_64.apk.sha256",
+            "Nova-Deck-x86_64-alpha.flatpak",
+            "Nova-Deck-x86_64-alpha.flatpak.sha256",
             ")",
         ))
         assertTrue(uploadLines.contains(
@@ -325,6 +335,8 @@ class NovaReleaseMetadataTest {
             "Nova-Android-armeabi-v7a.apk.sha256",
             "Nova-Android-x86_64.apk",
             "Nova-Android-x86_64.apk.sha256",
+            "Nova-Deck-x86_64-alpha.flatpak",
+            "Nova-Deck-x86_64-alpha.flatpak.sha256",
         )
         for (asset in exactAssetNames) {
             assertTrue(verifyLines.contains(asset))
@@ -338,7 +350,7 @@ class NovaReleaseMetadataTest {
         ))
         assertConsecutive(verifyLines, listOf(
             "if [ \"\${published_assets[*]}\" != \"\${expected_assets[*]}\" ]; then",
-            "echo \"Release assets do not match the exact six-file contract on \${GITHUB_REF_NAME}\" >&2",
+            "echo \"Release assets do not match the exact eight-file contract on \${GITHUB_REF_NAME}\" >&2",
             "printf 'expected: %s\\n' \"\${expected_assets[*]}\" >&2",
             "printf 'published: %s\\n' \"\${published_assets[*]}\" >&2",
             "exit 1",

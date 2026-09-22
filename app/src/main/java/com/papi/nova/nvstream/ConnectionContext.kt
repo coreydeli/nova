@@ -24,6 +24,12 @@ class ConnectionContext {
     @JvmField var currentGameOwnedByClient: Boolean? = null
     @JvmField var currentGameOwnerName: String? = null
     @JvmField var watchOnlyRequested = false
+    // What this device offers before a watch narrows the handshake to one stream's codec and
+    // depth. A second refusal for another mode is checked against this, never the narrowed list.
+    @JvmField var deviceVideoFormats: Int? = null
+    @JvmField var decodesHevcTenBit = false
+    @JvmField var decodesAv1TenBit = false
+    @JvmField var hdrRequestedInSettings = false
 
     @JvmField var negotiatedWidth = 0
     @JvmField var negotiatedHeight = 0

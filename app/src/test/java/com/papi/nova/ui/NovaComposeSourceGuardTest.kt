@@ -516,10 +516,13 @@ class NovaComposeSourceGuardTest {
             backdrop.contains("NovaLibraryUiStateMapper.cinematicBackdropArtworkKind(game) ?: return@let null")
         )
         assertTrue(
-            "only a real hero is drawn: cached for a desktop title, listed for a Space title, never Big Picture's bundled mark",
+            "only a real hero is drawn: cached for a desktop title, asked for a Space title, never a launcher's own mark, " +
+                "whether Steam Big Picture's bundled one or the one a host serves for Heroic. A Space title's used to " +
+                "have to be listed, and the host lists only what it has already fetched, so none was ever asked for",
             mapper.contains("fun cinematicBackdropArtworkKind(game: PolarisGame?): String?") &&
-                mapper.contains("hero.cached || game.space != null") &&
-                mapper.contains("game.space?.target == \"big-picture-v1\"")
+                mapper.contains("return if (hero.cached) PolarisGame.ARTWORK_KIND_HERO else null") &&
+                mapper.contains("PolarisApiClient.hostHasNoArtworkFor(game)) null else PolarisGame.ARTWORK_KIND_HERO") &&
+                mapper.contains("WorkerLaunchContract.isLauncherEntry(game.space?.target)")
         )
         assertTrue(backdrop.contains("apiClient.loadArtworkInto(view, target.game, PolarisGame.ARTWORK_KIND_HERO)"))
         assertFalse(
@@ -1340,6 +1343,25 @@ class NovaComposeSourceGuardTest {
         assertFalse(
             "the destination cards are not the legend: the legend stays a description and never a stop",
             playSetupComparison().contains("NovaPlaySetupDestinations")
+        )
+        assertTrue(
+            "while a destination card holds focus the legend describes the place under the cursor and " +
+                "nothing else. Falling back to the first row opened Play Setup on \"If you changed where it " +
+                "runs\" with the cursor on Desktop, and no legend at all opened it with the drawer empty",
+            content.contains("onExplainPlaySetupRow(NovaPlaySetupRow.PLAY_IN)") &&
+                content.contains("focusedDestination = index") &&
+                content.contains("novaPlaySetupPlaceUnderCursor(") &&
+                !content.contains("?: settingRows.firstOrNull()")
+        )
+        val placeLegend = setup.section(
+            "internal fun NovaPlaySetupPlaceLegend(",
+            "/** What a legend card says to a screen reader: its name, then what choosing it would mean. */",
+        )
+        assertFalse(
+            "the place legend describes; the card above it is the control, so the legend takes neither a " +
+                "tap nor focus, and it is the one place under the cursor rather than the cards restated",
+            placeLegend.contains(".clickable(") || placeLegend.contains(".focusable(") ||
+                placeLegend.contains("forEach")
         )
     }
 

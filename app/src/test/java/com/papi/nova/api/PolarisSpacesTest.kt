@@ -43,6 +43,21 @@ class PolarisSpacesTest {
         assertFalse(parsed.spaces[0].canOpen); assertEquals("unavailable", parsed.spaces[0].blockedReason)
         assertFalse(parsed.desktopSelected)
     }
+    @Test fun readsTheLauncherASpaceOpensWhenTheHostSaysSo() {
+        val body = """{"schema":1,"status":true,"enabled":true,"available":true,"can_switch":true,"selected_space_id":"a","spaces":[{"id":"a","name":"Alex","state":"ready","selected":true,"launcher":"heroic"},{"id":"b","name":"Sam","state":"ready","selected":false}]}"""
+        val parsed = requireNotNull(PolarisSpaces.parse(body))
+        assertEquals("heroic", parsed.spaces[0].launcher)
+        assertEquals("an older host says nothing, and that is not an error", null, parsed.spaces[1].launcher)
+        assertEquals(
+            "a launcher this build has never heard of must not cost the whole list",
+            "brand_new", requireNotNull(PolarisSpaces.parse(body.replace("heroic", "brand_new"))).spaces[0].launcher,
+        )
+        for (unusable in listOf("7", "\"two words\"", "null", "[\"heroic\"]")) {
+            val parsed = requireNotNull(PolarisSpaces.parse(body.replace("\"heroic\"", unusable))) { "a label cost the whole list: $unusable" }
+            assertEquals(null, parsed.spaces[0].launcher)
+            assertEquals("Alex", parsed.spaces[0].name)
+        }
+    }
     @Test fun derivesCanOpenForHostsThatDoNotSayAndRejectsTheWrongTypes() {
         val parsed = requireNotNull(PolarisSpaces.parse(valid))
         assertTrue(parsed.spaces[0].canOpen); assertFalse(parsed.spaces[1].canOpen)

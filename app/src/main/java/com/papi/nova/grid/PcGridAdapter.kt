@@ -6,10 +6,12 @@ import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.TextViewCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -20,6 +22,7 @@ import com.papi.nova.nvstream.http.ComputerDetails
 import com.papi.nova.nvstream.http.PairingManager
 import com.papi.nova.preferences.PreferenceConfiguration
 import com.papi.nova.ui.NovaThemeManager
+import com.papi.nova.ui.novaBreakAtDots
 import java.util.IdentityHashMap
 import java.util.Locale
 
@@ -39,6 +42,13 @@ class PcGridAdapter(
     init {
         setHasStableIds(true)
     }
+
+    /**
+     * A host's row is as wide as its list, so the poster grid's focus zoom pushed both its ends,
+     * and the sides of its focus ring, past the list's edge, where they were cut off. The ring
+     * and the lift say it has focus; it does not grow.
+     */
+    override val focusedScale: Float get() = 1f
 
     override fun getItemId(i: Int): Long = itemIds[i]
 
@@ -170,6 +180,17 @@ class PcGridAdapter(
         var statusHint: TextView? = null
         var primaryAction: TextView? = null
         var serverActions: View? = null
+        var well: View? = null
+        var dotRing: View? = null
+        var badges: View? = null
+        var badgeKind: TextView? = null
+        var badgeSpaces: TextView? = null
+        var body: LinearLayout? = null
+        var identity: View? = null
+        var actions: View? = null
+        var watchesWidth = false
+        /** Null until the card has been arranged once, so the first arrangement always applies. */
+        var stacked: Boolean? = null
     }
 
     private fun getPcHolder(parentView: View): PcViewHolder {
@@ -184,6 +205,14 @@ class PcGridAdapter(
         holder.statusHint = parentView.findViewById(R.id.status_hint_text)
         holder.primaryAction = parentView.findViewById(R.id.primary_action_text)
         holder.serverActions = parentView.findViewById(R.id.server_actions_button)
+        holder.well = parentView.findViewById(R.id.grid_image_layout)
+        holder.dotRing = parentView.findViewById(R.id.status_dot_ring)
+        holder.badges = parentView.findViewById(R.id.host_badges)
+        holder.badgeKind = parentView.findViewById(R.id.host_badge_kind)
+        holder.badgeSpaces = parentView.findViewById(R.id.host_badge_spaces)
+        holder.body = parentView.findViewById(R.id.server_card_body)
+        holder.identity = parentView.findViewById(R.id.server_card_identity)
+        holder.actions = parentView.findViewById(R.id.server_card_actions)
         parentView.setTag(TAG_PC_HOLDER, holder)
         return holder
     }
@@ -198,7 +227,18 @@ class PcGridAdapter(
         obj: PcViewModel.ComputerObject
     ) {
         val pcHolder = getPcHolder(parentView)
-        applyCardTheme(parentView, imgView, prgView!!, txtView, pcHolder)
+        val online = obj.details.state == ComputerDetails.State.ONLINE
+        applyCardTheme(parentView, imgView, prgView!!, txtView, pcHolder, online)
+        fitCardToWidth(parentView, pcHolder)
+        showHostBadges(
+            pcHolder,
+            novaHostBadges(
+                online = online,
+                paired = obj.details.pairState == PairingManager.PairState.PAIRED && obj.details.serverCert != null,
+                library = obj.details.libraryState,
+                spacesAvailable = obj.details.spacesAvailable,
+            ),
+        )
         pcHolder.serverActions?.apply {
             isActivated = true
             setOnClickListener { serverActionListener?.invoke(obj) }
@@ -233,6 +273,7 @@ class PcGridAdapter(
             statusDot?.setBackgroundResource(R.drawable.nova_status_online)
             if (statusText != null) {
                 if (obj.details.pairState == PairingManager.PairState.PAIRED && obj.details.serverCert == null) {
+                    statusDot?.setBackgroundResource(R.drawable.nova_status_connecting)
                     statusText.setText(R.string.pcview_card_status_repair_pair)
                     statusText.setTextColor(ContextCompat.getColor(context, R.color.nova_warning))
                     primaryAction?.setText(R.string.pcview_card_action_pair)
@@ -246,37 +287,56 @@ class PcGridAdapter(
                             R.string.pcview_card_status_repair_pair
                         }
                     )
+                    statusDot?.setBackgroundResource(R.drawable.nova_status_connecting)
                     statusText.setTextColor(ContextCompat.getColor(context, R.color.nova_warning))
                     primaryAction?.setText(R.string.pcview_card_action_pair)
                     setPrimaryActionReady(primaryAction, true)
                     setStatusHint(statusHint, R.string.pcview_card_hint_pair)
                 } else if (obj.details.runningGameId != 0) {
-                    statusText.setText(R.string.pcview_card_status_streaming)
-                    statusText.setTextColor(ContextCompat.getColor(context, R.color.nova_success))
-                    primaryAction?.setText(
-                        if (obj.details.currentGameOwnedByClient == false) {
-                            R.string.applist_menu_watch
-                        } else {
-                            R.string.pcview_card_action_resume
-                        }
+                    // The pill says where a press leads, and someone else's game does not lead
+                    // away from this device's library.
+                    val surface = novaHostPlaySurface(
+                        runningGame = true,
+                        ownedByThisDevice = obj.details.currentGameOwnedByClient,
+                        library = obj.details.libraryState,
+                        watchable = obj.details.currentGameWatchable,
                     )
-                    setPrimaryActionReady(primaryAction, true)
-                    setStatusHint(statusHint, R.string.pcview_card_hint_streaming)
+                    if (surface != NovaHostPlaySurface.RESUME && surface != NovaHostPlaySurface.WATCH) {
+                        // Someone else's game, and this device's own way in is not through it.
+                        val inUse = novaHostInUse(obj.details.currentGameOwnerDeviceName, obj.details.currentGameWatchable)
+                        statusText.text = if (inUse.owner != null) {
+                            context.getString(inUse.statusRes, inUse.owner)
+                        } else {
+                            context.getString(inUse.statusRes)
+                        }
+                        statusText.setTextColor(NovaThemeManager.getTextMutedColor(context))
+                        primaryAction?.setText(novaHostOwnWayInLabel(surface))
+                        setPrimaryActionReady(primaryAction, surface != NovaHostPlaySurface.CHECK_LIBRARY)
+                        setStatusHint(statusHint, inUse.cardHintRes)
+                    } else {
+                        statusText.setText(R.string.pcview_card_status_streaming)
+                        statusText.setTextColor(ContextCompat.getColor(context, R.color.nova_success))
+                        primaryAction?.setText(
+                            if (surface == NovaHostPlaySurface.WATCH) {
+                                R.string.applist_menu_watch
+                            } else {
+                                R.string.pcview_card_action_resume
+                            }
+                        )
+                        setPrimaryActionReady(primaryAction, true)
+                        setStatusHint(statusHint, R.string.pcview_card_hint_streaming)
+                    }
                 } else if (obj.details.libraryState == ComputerDetails.LibraryState.AVAILABLE) {
-                    statusText.text = context.getString(
+                    statusText.text = novaBreakAtDots(context.getString(
                         R.string.pcview_card_status_library_ready_format,
                         formatAddressSuffix(obj.details.activeAddress?.address)
-                    )
+                    ))
                     statusText.setTextColor(NovaThemeManager.getTextMutedColor(context))
                     primaryAction?.setText(R.string.pcview_card_action_open_library)
                     setPrimaryActionReady(primaryAction, true)
                     if (obj.details.spacesAvailable) {
+                        // The planet is on the Spaces badge now; the hint says what to do about it.
                         setStatusHint(statusHint, R.string.pcview_card_hint_spaces)
-                        statusHint?.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_spaces_planet, 0, 0, 0)
-                        statusHint?.compoundDrawablePadding = (6 * context.resources.displayMetrics.density).toInt()
-                        statusHint?.let {
-                            TextViewCompat.setCompoundDrawableTintList(it, ColorStateList.valueOf(NovaThemeManager.getAccentColor(context)))
-                        }
                     } else {
                         setStatusHint(statusHint, R.string.pcview_card_hint_open_library)
                     }
@@ -286,10 +346,10 @@ class PcGridAdapter(
                     primaryAction?.setText(R.string.pcview_card_action_checking_library)
                     setStatusHint(statusHint, R.string.pcview_card_hint_checking_library)
                 } else {
-                    statusText.text = context.getString(
+                    statusText.text = novaBreakAtDots(context.getString(
                         R.string.pcview_card_status_compatibility_format,
                         formatAddressSuffix(obj.details.activeAddress?.address)
-                    )
+                    ))
                     statusText.setTextColor(NovaThemeManager.getTextMutedColor(context))
                     primaryAction?.setText(R.string.pcview_card_action_open_apps)
                     setPrimaryActionReady(primaryAction, true)
@@ -355,12 +415,78 @@ class PcGridAdapter(
         primaryAction?.isSelected = false
     }
 
+    /**
+     * Arranges the card for the width it has, now and whenever that changes.
+     *
+     * The width is usually known when the card is bound, from the list it sits in, so the
+     * first frame is already right. The listener is what keeps it right when the window is
+     * resized or the rail folds away and the list gets wider.
+     */
+    private fun fitCardToWidth(parentView: View, holder: PcViewHolder) {
+        val body = holder.body ?: return
+        if (!holder.watchesWidth) {
+            holder.watchesWidth = true
+            body.addOnLayoutChangeListener { view, left, _, right, _, oldLeft, _, oldRight, _ ->
+                if (right - left != oldRight - oldLeft) {
+                    // This runs inside a layout pass, and a change of layout has to wait for the next.
+                    view.post { applyCardArrangement(holder, right - left) }
+                }
+            }
+        }
+        val known = body.width.takeIf { it > 0 }
+            ?: (parentView.parent as? View)?.let { it.width - it.paddingLeft - it.paddingRight }?.takeIf { it > 0 }
+            ?: return
+        applyCardArrangement(holder, known)
+    }
+
+    private fun applyCardArrangement(holder: PcViewHolder, widthPx: Int) {
+        val body = holder.body ?: return
+        val identity = holder.identity ?: return
+        val actions = holder.actions ?: return
+        val resources = context.resources
+        val stacked = novaHostCardStacks(
+            cardWidthDp = widthPx / resources.displayMetrics.density,
+            fontScale = resources.configuration.fontScale,
+        )
+        if (holder.stacked == stacked) return
+        holder.stacked = stacked
+
+        body.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        identity.layoutParams = (identity.layoutParams as LinearLayout.LayoutParams).apply {
+            width = if (stacked) ViewGroup.LayoutParams.MATCH_PARENT else 0
+            weight = if (stacked) 0f else 1f
+        }
+        actions.layoutParams = (actions.layoutParams as LinearLayout.LayoutParams).apply {
+            // Under the text rather than under the icon: the actions belong to the lines above them.
+            marginStart = if (stacked) {
+                resources.getDimensionPixelSize(R.dimen.nova_icon_server_container) +
+                    resources.getDimensionPixelSize(R.dimen.nova_spacing_lg)
+            } else {
+                resources.getDimensionPixelSize(R.dimen.nova_spacing_md)
+            }
+            topMargin = if (stacked) resources.getDimensionPixelSize(R.dimen.nova_spacing_sm) else 0
+        }
+    }
+
     private fun setPrimaryActionReady(primaryAction: TextView?, ready: Boolean) {
         primaryAction ?: return
         primaryAction.isActivated = ready
         primaryAction.isSelected = false
+        // The one filled control on the card: what a press on the card does. The fill is built
+        // here and not in the chip's XML because the accent is the theme manager's to say, and
+        // under Material You it is not the colour the theme attribute holds. Filled, its ink is
+        // the accent's own; until it is ready it is the same quiet outline as any other chip.
+        if (ready) {
+            primaryAction.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.resources.displayMetrics.density * NOVA_HOST_CARD_PILL_RADIUS_DP
+                setColor(NovaThemeManager.getAccentColor(context))
+            }
+        } else {
+            primaryAction.setBackgroundResource(R.drawable.nova_chip_default)
+        }
         primaryAction.setTextColor(
-            if (ready) NovaThemeManager.getTextPrimaryColor(context) else NovaThemeManager.getTextMutedColor(context),
+            if (ready) NovaThemeManager.getOnAccentColor(context) else NovaThemeManager.getTextMutedColor(context),
         )
     }
 
@@ -375,28 +501,105 @@ class PcGridAdapter(
         statusHint.visibility = View.VISIBLE
     }
 
-    private fun applyCardTheme(parentView: View, imgView: ImageView, prgView: ProgressBar, txtView: TextView, pcHolder: PcViewHolder) {
+    /** What is true of the host and worth a glance: the kind of host it is, and whether it has Spaces. */
+    private fun showHostBadges(holder: PcViewHolder, badges: NovaHostBadges) {
+        val accent = NovaThemeManager.getAccentColor(context)
+        val density = context.resources.displayMetrics.density
+        fun dress(badge: TextView, tinted: Boolean) {
+            val ink = if (tinted) accent else NovaThemeManager.getTextSecondaryColor(context)
+            badge.setTextColor(ink)
+            badge.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = density * 6f
+                setColor(ColorUtils.setAlphaComponent(ink, 0x1F))
+                setStroke(density.toInt().coerceAtLeast(1), ColorUtils.setAlphaComponent(ink, 0x52))
+            }
+        }
+        holder.badgeKind?.let { badge ->
+            badge.visibility = if (badges.polaris) View.VISIBLE else View.GONE
+            if (badges.polaris) {
+                badge.setText(R.string.pcview_card_badge_polaris)
+                dress(badge, tinted = false)
+            }
+        }
+        holder.badgeSpaces?.let { badge ->
+            badge.visibility = if (badges.spaces) View.VISIBLE else View.GONE
+            if (badges.spaces) {
+                dress(badge, tinted = true)
+                // The planet is drawn at the size of the badge's own type. At its intrinsic 24dp it
+                // set the badge's height, and Spaces stood half again as tall as Polaris beside it.
+                val planetSize = (badge.textSize * NOVA_HOST_BADGE_ICON_EM).toInt()
+                val planet = ContextCompat.getDrawable(context, R.drawable.ic_spaces_planet)?.mutate()
+                planet?.setBounds(0, 0, planetSize, planetSize)
+                badge.setCompoundDrawablesRelative(planet, null, null, null)
+                badge.compoundDrawablePadding = (4 * density).toInt()
+                TextViewCompat.setCompoundDrawableTintList(badge, ColorStateList.valueOf(accent))
+                // No leading margin when it stands alone, so the row still starts on the text's edge.
+                (badge.layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
+                    params.marginStart = if (badges.polaris) (6 * density).toInt() else 0
+                    badge.layoutParams = params
+                }
+            }
+        }
+        holder.badges?.visibility = if (badges.polaris || badges.spaces) View.VISIBLE else View.GONE
+    }
+
+    private fun applyCardTheme(
+        parentView: View,
+        imgView: ImageView,
+        prgView: ProgressBar,
+        txtView: TextView,
+        pcHolder: PcViewHolder,
+        online: Boolean,
+    ) {
         val card = if (parentView is ViewGroup && parentView.childCount > 0) {
             parentView.getChildAt(0)
         } else {
             parentView
         }
 
-        val background = GradientDrawable()
+        // A host that answers carries the accent in from its leading edge, and its mark stands
+        // in an accent well; one that does not is the plain card it always was. The card was
+        // one flat grey whatever the host was doing, which is most of why it read as bland.
+        val density = context.resources.displayMetrics.density
+        val cardColor = NovaThemeManager.getCardBackgroundColor(context)
+        val accent = NovaThemeManager.getAccentColor(context)
+        val leading = if (online) ColorUtils.blendARGB(cardColor, accent, NOVA_HOST_CARD_ACCENT_WASH) else cardColor
+        val fromLeadingEdge = if (context.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            GradientDrawable.Orientation.RIGHT_LEFT
+        } else {
+            GradientDrawable.Orientation.LEFT_RIGHT
+        }
+        val background = GradientDrawable(fromLeadingEdge, intArrayOf(leading, cardColor, cardColor))
         background.shape = GradientDrawable.RECTANGLE
-        background.cornerRadius = context.resources.displayMetrics.density * 16f
-        background.setColor(NovaThemeManager.getCardBackgroundColor(context))
-        background.setStroke(context.resources.displayMetrics.density.toInt(), NovaThemeManager.getDividerColor(context))
+        background.cornerRadius = density * 16f
+        background.setStroke(
+            density.toInt().coerceAtLeast(1),
+            if (online) ColorUtils.blendARGB(NovaThemeManager.getDividerColor(context), accent, 0.35f) else NovaThemeManager.getDividerColor(context),
+        )
         card.background = background
+
+        pcHolder.well?.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = density * 14f
+            setColor(
+                if (online) {
+                    ColorUtils.blendARGB(cardColor, accent, 0.26f)
+                } else {
+                    ColorUtils.blendARGB(cardColor, NovaThemeManager.getTextMutedColor(context), 0.16f)
+                },
+            )
+        }
+        // The ring takes the colour of the card under it, so the lamp reads as standing off the well.
+        pcHolder.dotRing?.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(ColorUtils.setAlphaComponent(leading, 0xFF))
+        }
 
         txtView.setTextColor(NovaThemeManager.getTextPrimaryColor(context))
         prgView.indeterminateTintList = ColorStateList.valueOf(NovaThemeManager.getAccentColor(context))
         imgView.imageTintList = ColorStateList.valueOf(NovaThemeManager.getTextSecondaryColor(context))
 
-        val primaryAction = parentView.findViewById<TextView>(R.id.primary_action_text)
-        if (primaryAction != null) {
-            primaryAction.setTextColor(NovaThemeManager.getAccentColor(context))
-        }
         pcHolder.statusText?.setTextColor(NovaThemeManager.getTextMutedColor(context))
         pcHolder.statusHint?.setTextColor(NovaThemeManager.getTextMutedColor(context))
     }
@@ -407,6 +610,50 @@ class PcGridAdapter(
 
         private fun getLayoutIdForPreferences(prefs: PreferenceConfiguration): Int = R.layout.pc_grid_item
     }
+}
+
+/**
+ * Whether a host card puts its actions under its text rather than beside it.
+ *
+ * Beside it, "Open Library" and "Manage" take about 215dp and the icon 64dp, and what is left is
+ * the column the host's name, its status and a sentence of advice have to fit in. On a 16:9
+ * handheld that is about 310dp. At 4:3 it was 215dp and the advice read "Spaces availab…"; on a
+ * phone held upright it was under 120dp. Below this width the text takes the whole card and the
+ * actions sit under it. Larger type needs the room sooner, so the width scales with it.
+ */
+internal fun novaHostCardStacks(cardWidthDp: Float, fontScale: Float): Boolean =
+    cardWidthDp < NOVA_HOST_CARD_SIDE_BY_SIDE_MIN_DP * fontScale.coerceAtLeast(1f)
+
+internal const val NOVA_HOST_CARD_SIDE_BY_SIDE_MIN_DP = 500f
+
+/** The corner nova_chip_default gives Manage, so the filled pill beside it is the same shape. */
+private const val NOVA_HOST_CARD_PILL_RADIUS_DP = 12f
+
+/** A badge's icon, in ems of the badge's type, so it grows with the text and never past it. */
+private const val NOVA_HOST_BADGE_ICON_EM = 1.2f
+
+/** How far the accent washes into an online host's card from its leading edge. */
+private const val NOVA_HOST_CARD_ACCENT_WASH = 0.20f
+
+internal data class NovaHostBadges(val polaris: Boolean, val spaces: Boolean)
+
+/**
+ * The facts a host's card wears as badges. Only what is known and true right now: a host that
+ * is not answering, or not paired, or whose library has not been asked about yet has nothing to
+ * claim, and a badge that guessed would be one more thing on the card to distrust. A host in
+ * compatibility mode wears none, because its status line already says exactly that.
+ */
+internal fun novaHostBadges(
+    online: Boolean,
+    paired: Boolean,
+    library: ComputerDetails.LibraryState?,
+    spacesAvailable: Boolean,
+): NovaHostBadges {
+    if (!online || !paired) {
+        return NovaHostBadges(polaris = false, spaces = false)
+    }
+    val polaris = library == ComputerDetails.LibraryState.AVAILABLE
+    return NovaHostBadges(polaris = polaris, spaces = polaris && spacesAvailable)
 }
 
 private fun stableServerId(uuid: String): Long {

@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+## 1.4.12 - 2026-09-22
+
+Nova comes to the Steam Deck as an Alpha, Spaces open Heroic and Lutris beside Steam, and Watch works whatever size your screen is. Nova 1.4.12 is matched with Polaris 1.4.12.
+
+**Nova for Steam Deck (Alpha)**
+
+- A native SteamOS client, attached to this release as `Nova-Deck-x86_64-alpha.flatpak`. It pairs on its own with a PIN or Trusted Pair, browses the Library with its artwork, runs Play Setup, and streams with native video and audio, Command Center and NovaHUD.
+- Controllers get players, rumble and deadzones, and keyboard and mouse work from the first build.
+- Add it to Game Mode once and launch it like any game. The [Steam Deck guide](https://papi-ux.com/docs/nova/steam-deck/) has the three commands.
+- It is an Alpha, for anyone who wants to try it early: the mouse follows the pointer on screen, relative aiming and touch modes are not in yet, and some Android features are still partial. Try it and tell us what breaks, on GitHub or in the Matrix room.
+
+**Spaces With Heroic and Lutris**
+
+- A Space can open Heroic Games Launcher or Lutris beside Steam. Its library loads, and Change Space says which launcher each Space opens.
+- A game with no artwork gets a poster with its name on it, so a Heroic or Lutris library is no longer a row of identical tiles.
+- A library that cannot be read says which entry and what was wrong with it.
+
+**Watch Stream**
+
+- Watch works whatever resolution this device would ask for. Nova takes the running stream's mode, codec and depth before it asks, so the host does not refuse it.
+- Watch is offered only when there is a stream to watch, so a game left open on the host no longer turns every card into Watch Stream.
+- A watcher refused an HDR stream is told which reason holds: this device cannot decode it, or Request HDR is off in Settings.
+
+**Hosts**
+
+- A host's card has a state lamp and badges, uses the width of the screen, and no longer cuts what it says.
+- Manage opens a rebuilt sheet, and Wake Host reads Sleep Host when the machine is already awake.
+- Deleting a PC asks it to forget this device, so pairing again no longer leaves a second entry on the host.
+- A sheet's actions scroll, so Delete PC can be reached on a landscape handheld.
+
+**Play Setup, the Game Page and Artwork Studio**
+
+- Play Setup plans resolutions from this device rather than from the host.
+- Play Setup keeps its legend in sight and explains the row the cursor is on, and shows text it had to cut when you ask for it.
+- Artwork Studio and the game page use the whole screen, and the keyboard stays down until you pick a search field.
+- Every screen follows the device when it is turned or resized.
+
+**Under the Hood**
+
+- BouncyCastle 1.85 closes two advisories in the library that signs Nova's pairing certificate.
+- A Space's Command Center shows its health line once, and Live Tuning says Fixed there.
+
+Spaces with Heroic and Lutris, and Watch knowing the mode up front, need Polaris 1.4.12. An older host's Watch refusal is read and the watch asked again once.
+
 ## 1.4.11 - 2026-09-19
 
 Retroid handhelds look and play like a console, NovaHUD reads at a glance in every layout, and couch co-op shows who is who. Nova 1.4.11 is matched with Polaris 1.4.11.
