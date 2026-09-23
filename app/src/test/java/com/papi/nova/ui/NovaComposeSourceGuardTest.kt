@@ -10,6 +10,65 @@ import org.junit.Test
 
 class NovaComposeSourceGuardTest {
     @Test
+    fun commandCenterClosesOnlyWhenSomethingElseNeedsTheScreen() {
+        val menu = readNovaQuickMenu()
+
+        // A change made from the drawer used to cost the drawer. Toggling the on-screen controller
+        // or sending the clipboard changes nothing about who owns the screen, so those stay open and
+        // the drawer refreshes its own row instead of leaving. The ones that still close hand the
+        // screen or the input to something else, and each says which.
+        val staysOpen = mapOf(
+            "CONTROLLER" to "game.toggleVirtualController()",
+            "PASTE_CLIPBOARD" to "game.sendClipboard(true)",
+        )
+        val closes = mapOf(
+            "MOUSE_MODE" to "game.selectMouseMode(game)",
+            "KEYBOARD" to "game.toggleFullKeyboard()",
+            "PLAYERS" to "game.reassignPlayers()",
+            "ROTATE_SCREEN" to "game.rotateScreen()",
+            "MORE_KEYS" to "legacyMenu.showMenu(device)",
+        )
+
+        for ((action, call) in staysOpen + closes) {
+            val branch = quickMenuActionBranch(menu, action)
+            assertTrue("$action must still be handled from the drawer", branch.contains(call))
+            val closesDrawer = branch.contains("dismiss()")
+            if (action in staysOpen) {
+                assertFalse(
+                    "$action is a setting: the drawer must stay open so a change does not cost " +
+                        "the menu and the place in it",
+                    closesDrawer,
+                )
+            } else {
+                assertTrue(
+                    "$action hands the screen or the input to something else, so it must close " +
+                        "the drawer",
+                    closesDrawer,
+                )
+                assertTrue(
+                    "$action closes the drawer, so the reason must be written next to it",
+                    branch.lines().any { it.trim().startsWith("//") },
+                )
+            }
+        }
+    }
+
+    /** One `when` branch of the Command Center's action handlers, without the ones after it. */
+    private fun quickMenuActionBranch(menu: String, action: String): String {
+        val marker = "NovaQuickMenuActionId.$action -> {"
+        val start = menu.indexOf(marker)
+        assertTrue("Missing Command Center action branch: $action", start >= 0)
+        assertEquals(
+            "One handler per action, so this guard reads the branch it means to",
+            1,
+            Regex(Regex.escape(marker)).findAll(menu).count(),
+        )
+        val next = menu.indexOf("NovaQuickMenuActionId.", start + marker.length)
+        val end = if (next >= 0) next else menu.length
+        return menu.substring(start, end)
+    }
+
+    @Test
     fun commandCenterRendersExplanationSourceAndCapabilityExactActions() {
         val menu = readNovaQuickMenu()
         val content = readNovaQuickMenuContent()
@@ -1347,9 +1406,11 @@ class NovaComposeSourceGuardTest {
         assertTrue(
             "while a destination card holds focus the legend describes the place under the cursor and " +
                 "nothing else. Falling back to the first row opened Play Setup on \"If you changed where it " +
-                "runs\" with the cursor on Desktop, and no legend at all opened it with the drawer empty",
+                "runs\" with the cursor on Desktop, and no legend at all opened it with the drawer empty. " +
+                "The cursor is remembered by the card's name, because the host can add or drop a Space " +
+                "while it holds focus and a remembered position then points at the place that moved into it",
             content.contains("onExplainPlaySetupRow(NovaPlaySetupRow.PLAY_IN)") &&
-                content.contains("focusedDestination = index") &&
+                content.contains("focusedDestination = destinationsRow.options.getOrNull(index)?.label") &&
                 content.contains("novaPlaySetupPlaceUnderCursor(") &&
                 !content.contains("?: settingRows.firstOrNull()")
         )
